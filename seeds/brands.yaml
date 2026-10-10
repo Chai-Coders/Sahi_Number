@@ -6,6 +6,16 @@
   official_numbers: []
   domain_verified: false
 
+- id: sbi
+  name: "State Bank of India"
+  aliases: ["SBI", "SBI Bank"]
+  official_domain: "sbi.bank.in"
+  contact_urls: []
+  official_numbers:
+    - number: "1800 11 2211"
+      source_url: "https://sbi.bank.in/web/customer-care/contact-us"
+      verified_on: "2026-10-10"
+  domain_verified: true
+
 # Add real brands only after checking the domain by hand. Add a number only
 # with source_url and verified_on from a page fetched in the same session.
-

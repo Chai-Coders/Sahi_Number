@@ -7,6 +7,33 @@ import httpx
 from sahi.store import Store
 
 
+async def suggest_locations(query: str, limit: int = 8) -> list[dict[str, Any]]:
+    """Return canonical Indian locations from SerpApi's free location index."""
+
+    cleaned = " ".join(query.split())
+    if len(cleaned) < 2:
+        return []
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.get(
+            "https://serpapi.com/locations.json", params={"q": cleaned, "limit": limit * 2}
+        )
+    response.raise_for_status()
+    suggestions = []
+    for item in response.json():
+        if item.get("country_code") != "IN":
+            continue
+        suggestions.append(
+            {
+                "name": str(item.get("name", "")),
+                "canonical_name": str(item.get("canonical_name", "")),
+                "target_type": str(item.get("target_type", "Place")),
+            }
+        )
+        if len(suggestions) >= limit:
+            break
+    return suggestions
+
+
 async def resolve_location(city: str, store: Store) -> dict[str, Any] | None:
     """Resolve an Indian city using SerpApi's free Locations endpoint."""
 

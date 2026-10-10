@@ -1,0 +1,14 @@
+# Domains allowed to corroborate a number after the page matches the requested
+# brand. This is intentionally a small, reviewable allowlist; commercial
+# directories, review sites, and social networks are not reference sources.
+public_authority_suffixes:
+  - .gov.in
+  - .nic.in
+statutory_regulator_domains:
+  - rbi.org.in
+  - sebi.gov.in
+  - irdai.gov.in
+  - pfrda.org.in
+  - npci.org.in
+  - trai.gov.in
+  - uidai.gov.in

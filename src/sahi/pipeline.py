@@ -10,7 +10,7 @@ from typing import Any
 import yaml
 
 from sahi.config import ROOT, Settings
-from sahi.extract.phones import PhoneClass
+from sahi.extract.phones import PhoneClass, discovery_query, primary_search_query
 from sahi.extract.walker import Sighting, registrable_domain, walk_response
 from sahi.reference import (
     Brand,
@@ -35,6 +35,9 @@ from sahi.serp.engines import (
     search_helpline,
     search_maps,
     search_number,
+    search_number_contextual,
+    search_number_discovery,
+    search_number_with_brand,
     search_official_site,
     search_public_directory,
 )
@@ -98,7 +101,7 @@ class Pipeline:
         queries = yaml.safe_load((ROOT / "seeds" / "queries.yaml").read_text())
         templates = queries.get(lang) or queries["en"]
         query = templates[0].format(brand=brand.name)
-        search_location = city
+        search_location: str | None = city
         latitude: float | None = None
         longitude: float | None = None
         if self.settings.effective_mode == "live":
@@ -111,6 +114,13 @@ class Pipeline:
                     search_location = str(resolved["canonical_name"])
                     latitude = resolved.get("lat")
                     longitude = resolved.get("lng")
+                else:
+                    search_location = None
+                    query = f"{query} {city}"
+                    skipped.append(
+                        "No canonical SerpApi location matched the place; "
+                        "running a country-wide query with the place words instead"
+                    )
 
         async def attempt(
             label: str, call: Callable[[], Awaitable[SearchResult]] | None
@@ -163,7 +173,7 @@ class Pipeline:
                 lambda: search_maps(
                     self.client,
                     budget,
-                    brand.name,
+                    f"{brand.name} {city}" if search_location is None else brand.name,
                     search_location,
                     lang,
                     latitude,
@@ -179,7 +189,11 @@ class Pipeline:
             attempt(
                 "Public-directory search",
                 lambda: search_public_directory(
-                    self.client, budget, brand.name, search_location, fresh=fresh
+                    self.client,
+                    budget,
+                    f"{brand.name} {city}" if search_location is None else brand.name,
+                    search_location,
+                    fresh=fresh,
                 ),
             ),
         )
@@ -229,8 +243,14 @@ class Pipeline:
         references, reference_failures = await build_reference_set(
             effective_brand, official_result.body if official_result else {}, self.store
         )
+        trusted_results = {
+            "organic_results": [
+                *((directory_result.body if directory_result else {}).get("organic_results", [])),
+                *((helpline_result.body if helpline_result else {}).get("organic_results", [])),
+            ]
+        }
         directory_references, directory_failures = await build_public_directory_references(
-            effective_brand, directory_result.body if directory_result else {}, self.store
+            effective_brand, trusted_results, self.store
         )
         references.extend(directory_references)
         self.store.save_brand_references(effective_brand, references)
@@ -267,7 +287,7 @@ class Pipeline:
             result = await attempt(
                 f"Number search for {canonical}",
                 lambda normalized=normalized: search_number(
-                    self.client, budget, list(normalized.search_variants)
+                    self.client, budget, primary_search_query(normalized)
                 ),
             )
             if result:
@@ -370,7 +390,12 @@ class Pipeline:
         )
 
     async def number_check(
-        self, value: str, brand: Brand | None = None, *, fresh: bool = False
+        self,
+        value: str,
+        brand: Brand | None = None,
+        location: str | None = None,
+        *,
+        fresh: bool = False,
     ) -> NumberCheckResult:
         from sahi.extract.phones import normalise_phone
 
@@ -380,23 +405,82 @@ class Pipeline:
         started = datetime.now(UTC)
         check_id = uuid.uuid4().hex
         budget = SearchBudget(self.settings.max_searches_per_check)
+        skipped: list[str] = []
         try:
-            result = await search_number(self.client, budget, list(normalized.search_variants))
+            result = await search_number(
+                self.client, budget, primary_search_query(normalized), location
+            )
         except (BudgetExceeded, ReplayMiss, SerpApiError) as error:
             raise ValueError(f"Number search unavailable: {error}") from error
         self.store.link_check_search(check_id, result.search_id, "Number search")
+        number_results = [result]
         sightings = [
             item
             for item in walk_response(result.body, result.search_id, result.engine)
             if item.canonical == normalized.canonical
         ]
+        fallback_query = discovery_query(normalized)
+        if not sightings and fallback_query != primary_search_query(normalized):
+            try:
+                fallback = await search_number_discovery(
+                    self.client, budget, fallback_query, location
+                )
+            except (BudgetExceeded, ReplayMiss, SerpApiError) as error:
+                skipped.append(f"Plain-number fallback skipped: {error}")
+            else:
+                number_results.append(fallback)
+                self.store.link_check_search(
+                    check_id, fallback.search_id, "Plain-number fallback search"
+                )
+                sightings = [
+                    item
+                    for item in walk_response(fallback.body, fallback.search_id, fallback.engine)
+                    if item.canonical == normalized.canonical
+                ]
+        if not sightings:
+            try:
+                contextual = await search_number_contextual(
+                    self.client, budget, fallback_query, location
+                )
+            except (BudgetExceeded, ReplayMiss, SerpApiError) as error:
+                skipped.append(f"Contact-context number search skipped: {error}")
+            else:
+                number_results.append(contextual)
+                self.store.link_check_search(
+                    check_id, contextual.search_id, "Contact-context number search"
+                )
+                sightings = [
+                    item
+                    for item in walk_response(
+                        contextual.body, contextual.search_id, contextual.engine
+                    )
+                    if item.canonical == normalized.canonical
+                ]
+        if not sightings and brand:
+            try:
+                contextual = await search_number_with_brand(
+                    self.client, budget, brand.name, fallback_query, location
+                )
+            except (BudgetExceeded, ReplayMiss, SerpApiError) as error:
+                skipped.append(f"Brand-qualified number search skipped: {error}")
+            else:
+                number_results.append(contextual)
+                self.store.link_check_search(
+                    check_id, contextual.search_id, "Brand-qualified number search"
+                )
+                sightings = [
+                    item
+                    for item in walk_response(
+                        contextual.body, contextual.search_id, contextual.engine
+                    )
+                    if item.canonical == normalized.canonical
+                ]
         domains: dict[str, list[Sighting]] = {}
         for item in sightings:
             domains.setdefault(item.domain or "unknown", []).append(item)
         references: list[ReferenceNumber] = []
         signals: dict[str, dict[str, Any]] = {}
         decision = None
-        skipped: list[str] = []
         effective_brand = brand
         if brand:
             directory_result: SearchResult | None = None
@@ -409,6 +493,21 @@ class Pipeline:
                 )
             except (BudgetExceeded, ReplayMiss, SerpApiError) as error:
                 skipped.append(f"Public-directory search skipped: {error}")
+            if directory_result:
+                existing = {
+                    (item.receipt_id, item.json_path, item.canonical) for item in sightings
+                }
+                for item in walk_response(
+                    directory_result.body,
+                    directory_result.search_id,
+                    directory_result.engine,
+                ):
+                    key = (item.receipt_id, item.json_path, item.canonical)
+                    if item.canonical != normalized.canonical or key in existing:
+                        continue
+                    sightings.append(item)
+                    domains.setdefault(item.domain or "unknown", []).append(item)
+                    existing.add(key)
             if not brand.official_domain:
                 try:
                     identity_result = await search_brand_identity(
@@ -462,8 +561,22 @@ class Pipeline:
             references, failures = await build_reference_set(
                 effective_brand, official_body, self.store
             )
+            trusted_results = {
+                "organic_results": [
+                    *(
+                        (directory_result.body if directory_result else {}).get(
+                            "organic_results", []
+                        )
+                    ),
+                    *(
+                        item
+                        for number_result in number_results
+                        for item in number_result.body.get("organic_results", [])
+                    ),
+                ]
+            }
             directory_references, directory_failures = await build_public_directory_references(
-                effective_brand, directory_result.body if directory_result else {}, self.store
+                effective_brand, trusted_results, self.store
             )
             references.extend(directory_references)
             skipped.extend(failures)
@@ -475,7 +588,7 @@ class Pipeline:
                 references,
                 sightings,
                 effective_brand.official_domain,
-                number_results=[result.body],
+                number_results=[item.body for item in number_results],
                 number_search_ran=True,
             )
             reference_sources: dict[str, set[str]] = {}

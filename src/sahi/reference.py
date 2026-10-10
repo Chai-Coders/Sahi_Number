@@ -132,11 +132,18 @@ async def build_reference_set(
     return references, failures
 
 
-def _is_public_authority_url(url: str) -> bool:
+def _trusted_source_kind(url: str) -> str | None:
     host = (urlsplit(url).hostname or "").casefold()
-    return (
-        host == "gov.in" or host.endswith(".gov.in") or host == "nic.in" or host.endswith(".nic.in")
-    )
+    config = yaml.safe_load((ROOT / "seeds" / "trusted_sources.yaml").read_text()) or {}
+    for domain in config.get("statutory_regulator_domains", []):
+        domain = str(domain).casefold()
+        if host == domain or host.endswith(f".{domain}"):
+            return "STATUTORY_REGULATOR"
+    for suffix in config.get("public_authority_suffixes", []):
+        suffix = str(suffix).casefold()
+        if host.endswith(suffix):
+            return "GOVERNMENT_DIRECTORY"
+    return None
 
 
 def _brand_terms(name: str) -> set[str]:
@@ -148,7 +155,7 @@ async def build_public_directory_references(
     directory_search: dict[str, Any],
     store: Store | None = None,
 ) -> tuple[list[ReferenceNumber], list[str]]:
-    """Collect branch numbers from a matching Indian public-authority directory.
+    """Collect numbers from matching Indian public-authority and regulator pages.
 
     These remain explicitly labelled as government-directory evidence rather
     than being silently represented as pages controlled by the brand.
@@ -160,12 +167,19 @@ async def build_public_directory_references(
     seen: set[str] = set()
     for item in directory_search.get("organic_results", []):
         link = str(item.get("link", ""))
-        if not _is_public_authority_url(link):
+        source_kind = _trusted_source_kind(link)
+        if not source_kind:
             continue
         snippet = " ".join(str(item.get(key, "")) for key in ("title", "snippet"))
         matched_terms = {term for term in required_terms if term in snippet.casefold()}
         if len(matched_terms) < min(2, len(required_terms)):
             continue
+        for match in find_phones(snippet):
+            if match.kind != PhoneClass.SHORT_CODE and match.canonical not in seen:
+                references.append(
+                    ReferenceNumber(match.canonical, match.kind, source_kind, link)
+                )
+                seen.add(match.canonical)
         try:
             body = await _contact_body(link, store)
         except (httpx.HTTPError, ValueError) as error:
@@ -175,13 +189,21 @@ async def build_public_directory_references(
         if len(page_terms) < min(2, len(required_terms)):
             failures.append(f"Public directory identity did not match: {link}")
             continue
-        for match in find_phones(body):
+        page_numbers = [
+            match for match in find_phones(body) if match.kind != PhoneClass.SHORT_CODE
+        ]
+        if len(page_numbers) > 5:
+            failures.append(
+                f"Public directory page was too broad to use as one brand reference: {link}"
+            )
+            continue
+        for match in page_numbers:
             if match.canonical not in seen:
                 references.append(
                     ReferenceNumber(
                         match.canonical,
                         match.kind,
-                        "GOVERNMENT_DIRECTORY",
+                        source_kind,
                         link,
                     )
                 )

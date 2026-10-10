@@ -44,3 +44,16 @@ def test_public_directory_match_is_explained_as_public_authority_evidence():
     )
     assert decision.verdict == Verdict.OFFICIAL_MATCH
     assert decision.reasons == ("Found in a matching Indian public-authority directory",)
+
+
+def test_regulator_match_is_explained_as_regulator_evidence():
+    decision = decide(
+        "18002667575",
+        {"18002667575"},
+        {},
+        {"18002667575": {"STATUTORY_REGULATOR"}},
+    )
+    assert decision.verdict == Verdict.OFFICIAL_MATCH
+    assert decision.reasons == (
+        "Found on a matching statutory-regulator or national-infrastructure page",
+    )

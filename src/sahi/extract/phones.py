@@ -89,12 +89,29 @@ def _variants(raw: str, digits: str, kind: PhoneClass, canonical: str) -> tuple[
             national = digits
             international = canonical
         national_digits = re.sub(r"\D", "", national)
+        mobile_local = ""
+        mobile_international = ""
+        if kind == PhoneClass.MOBILE and canonical.startswith("+91"):
+            local_digits = canonical.removeprefix("+91")
+            mobile_local = f"{local_digits[:5]} {local_digits[5:]}"
+            mobile_international = f"+91 {mobile_local}"
+        local_compact = ""
+        local_dashed = ""
+        if kind == PhoneClass.LANDLINE:
+            parts = national.split()
+            if len(parts) >= 2:
+                local_compact = f"{parts[0]} {''.join(parts[1:])}"
+                local_dashed = f"{parts[0]}-{''.join(parts[1:])}"
         return _quoted_unique(
             e164,
             e164.lstrip("+"),
             national_digits,
             national,
             international,
+            mobile_local,
+            mobile_international,
+            local_compact,
+            local_dashed,
             raw,
         )
     return _quoted_unique(digits)
@@ -124,6 +141,41 @@ def display_phone(value: str) -> str:
 
     match = normalise_phone(value)
     return match.display if match else value
+
+
+def discovery_query(match: PhoneMatch) -> str:
+    """Return the most familiar unquoted spelling for a fallback web search."""
+
+    values = [value.strip('"') for value in match.search_variants]
+    if match.kind == PhoneClass.MOBILE and match.canonical.startswith("+91"):
+        local_digits = match.canonical.removeprefix("+91")
+        return f"{local_digits[:5]} {local_digits[5:]}"
+    if match.kind == PhoneClass.LANDLINE:
+        for value in values:
+            if value.startswith("0") and " " in value:
+                area, subscriber = value.split(" ", 1)
+                if " " not in subscriber:
+                    return f"{area} {subscriber}"
+    for value in values:
+        if " " in value and not value.startswith("+"):
+            return value
+    return match.raw
+
+
+def primary_search_query(match: PhoneMatch) -> str:
+    """Return the compact, familiar number a person is most likely to search.
+
+    Keep an Indian landline's trunk prefix when it was entered, but remove the
+    country prefix from Indian mobile and landline numbers. Formatting variants
+    remain available through ``discovery_query`` as a later fallback.
+    """
+
+    entered_digits = re.sub(r"\D", "", ascii_digits(match.raw))
+    if match.kind in {PhoneClass.MOBILE, PhoneClass.LANDLINE}:
+        if len(entered_digits) == 12 and entered_digits.startswith("91"):
+            return entered_digits[2:]
+        return entered_digits
+    return entered_digits or re.sub(r"\D", "", match.canonical)
 
 
 def normalise_phone(value: str) -> PhoneMatch | None:

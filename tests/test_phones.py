@@ -1,6 +1,12 @@
 import pytest
 
-from sahi.extract.phones import PhoneClass, find_phones, normalise_phone
+from sahi.extract.phones import (
+    PhoneClass,
+    discovery_query,
+    find_phones,
+    normalise_phone,
+    primary_search_query,
+)
 
 
 @pytest.mark.parametrize(
@@ -93,3 +99,19 @@ def test_indian_landline_has_a_human_readable_display_format():
     assert match.canonical == "+914822258058"
     assert match.kind == PhoneClass.LANDLINE
     assert match.display == "+91 4822 258 058"
+    assert '"04822 258058"' in match.search_variants
+    assert '"04822-258058"' in match.search_variants
+
+
+def test_primary_number_search_uses_the_compact_number_the_person_entered():
+    match = normalise_phone("9400063494")
+
+    assert match is not None
+    assert primary_search_query(match) == "9400063494"
+
+
+def test_mobile_discovery_search_does_not_add_a_landline_trunk_prefix():
+    match = normalise_phone("9400063494")
+
+    assert match is not None
+    assert discovery_query(match) == "94000 63494"

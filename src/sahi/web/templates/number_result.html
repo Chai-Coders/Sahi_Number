@@ -4,6 +4,7 @@
 <section class="page narrow">
   <a class="back" href="/?ui={{ ui }}">← {{ copy.new_check }}</a>
   <h1>{{ display }}</h1>
+  {% if number_kind %}<p class="number-type"><strong>{{ copy.number_type }}:</strong> {{ copy.phone_types[number_kind] }} <span>{{ number_kind }}</span></p>{% endif %}
   {% if brand_record %}
   <section class="reference-strip">
     <h2>{{ copy.compared_brand }}</h2>
@@ -15,6 +16,26 @@
   {% if check.verdicts %}<div class="verdict-banner"><strong>{{ check.verdicts[0].verdict }}</strong><span>{{ check.verdicts[0].reasons|join(' · ') }}</span></div>{% else %}<div class="verdict-banner"><strong>{{ copy.no_verdict }}</strong><span>{{ copy.no_verdict_body }}</span></div>{% endif %}
   <h2>{{ copy.domains }}</h2>
   {% for domain, items in domains.items() %}<article class="evidence-row"><strong>{{ domain }}</strong><span>{{ items|length }}</span>{% for item in items %}<a href="/receipt/{{ item.search_id }}?ui={{ ui }}">{{ item.title or item.surface }}</a>{% endfor %}</article>{% else %}<p>{{ copy.no_appearances }}</p>{% endfor %}
+  {% if claims %}
+  <section class="claim-panel" aria-labelledby="claims-heading">
+    <h2 id="claims-heading">{{ copy.claims_plain }}</h2>
+    <p>{{ copy.claims_plain_body }}</p>
+    <ul class="claim-list">
+      {% for item in claims %}
+      <li>
+        <p><strong>{{ copy.result_says }}:</strong> {{ item.title or item.surface }}</p>
+        <p><strong>{{ copy.website }}:</strong> {{ item.domain or copy.unavailable }}</p>
+        {% if item.is_brand_site %}<span class="source-label trusted">{{ copy.brand_site }}</span>{% elif item.is_government %}<span class="source-label trusted">{{ copy.government_site }}</span>{% else %}<span class="source-label">{{ copy.other_site }}</span>{% endif %}
+        <a class="evidence-link" href="/receipt/{{ item.search_id }}?ui={{ ui }}" aria-label="{{ copy.open_saved_evidence }}: {{ item.title or item.surface }}">{{ copy.open_saved_evidence }} →</a>
+      </li>
+      {% endfor %}
+    </ul>
+    <div class="claim-checklist">
+      <h3>{{ copy.claims_check_title }}</h3>
+      <ul>{% for step in copy.claims_check_steps %}<li>{{ step }}</li>{% endfor %}</ul>
+    </div>
+  </section>
+  {% endif %}
   <p class="advice">{{ copy.advice }}</p>
 </section>
 {% endblock %}

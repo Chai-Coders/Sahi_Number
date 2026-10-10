@@ -205,6 +205,12 @@ input {
   border-radius: 12px;
   padding: 0.7rem 0.8rem;
 }
+.field-note {
+  min-height: 1rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
 button.primary {
   border: 0;
   border-radius: 12px;
@@ -287,6 +293,86 @@ button.primary:active {
 .reference-strip {
   padding: 1.25rem 0 1.6rem;
   border-bottom: 1px solid var(--line);
+}
+.number-type {
+  color: var(--muted);
+  margin: -0.4rem 0 1rem;
+}
+.number-type span {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0.18rem 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+.claim-panel {
+  margin-top: 2rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--raised);
+}
+.claim-panel h2 {
+  margin-top: 0;
+}
+.claim-panel > p {
+  color: var(--muted);
+  font-size: 1.05rem;
+  line-height: 1.65;
+}
+.claim-list,
+.finding-list {
+  list-style: none;
+  margin: 1.25rem 0;
+  padding: 0;
+}
+.claim-list > li,
+.finding-list > li {
+  padding: 1.15rem;
+  margin: 0 0 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+}
+.claim-list p {
+  margin: 0 0 0.55rem;
+  line-height: 1.55;
+}
+.source-label {
+  display: inline-block;
+  margin: 0.15rem 0 0.85rem;
+  padding: 0.3rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--raised);
+  font-size: 0.9rem;
+  font-weight: 750;
+}
+.source-label.trusted {
+  border-color: var(--green);
+  color: var(--green-deep);
+  background: #e2eee7;
+}
+.evidence-link {
+  display: block;
+  width: fit-content;
+  min-height: 2.75rem;
+  padding: 0.65rem 0;
+  font-weight: 750;
+}
+.claim-checklist {
+  padding-top: 0.35rem;
+}
+.claim-checklist h3 {
+  margin-bottom: 0.45rem;
+}
+.claim-checklist li,
+.verify-guide li {
+  margin: 0.65rem 0;
+  line-height: 1.55;
 }
 .reference-strip h2 {
   font-size: 1rem;
@@ -408,6 +494,92 @@ pre {
   margin: 0.3rem 0 0;
   overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
+}
+.receipt-page {
+  max-width: 58rem;
+}
+.eyebrow {
+  margin: 0;
+  color: var(--green-deep);
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+.receipt-intro {
+  max-width: 65ch;
+  color: var(--muted);
+  font-size: 1.12rem;
+  line-height: 1.65;
+}
+.receipt-section {
+  padding: 0.15rem 0 1.5rem;
+  border-bottom: 1px solid var(--line);
+}
+.plain-facts {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.plain-facts div {
+  display: grid;
+  grid-template-columns: minmax(9rem, 0.75fr) 2fr;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  background: var(--raised);
+  border-bottom: 1px solid var(--line);
+}
+.plain-facts div:last-child {
+  border-bottom: 0;
+}
+.plain-facts dt {
+  color: var(--muted);
+  font-weight: 700;
+}
+.plain-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-weight: 650;
+}
+.finding-list h3 {
+  margin: 0 0 0.75rem;
+  font-size: 1.12rem;
+}
+.finding-facts {
+  padding-left: 1.25rem;
+  line-height: 1.55;
+}
+.finding-facts li {
+  margin: 0.4rem 0;
+}
+.verify-guide {
+  margin: 2rem 0;
+  padding: 0.25rem 1.25rem 1rem;
+  border-left: 5px solid var(--green);
+  background: #e8eee8;
+}
+.technical-details {
+  margin-top: 2rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--raised);
+}
+.technical-details summary {
+  min-height: 3rem;
+  padding: 1rem 1.15rem;
+  cursor: pointer;
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+.technical-details[open] summary {
+  border-bottom: 1px solid var(--line);
+}
+.technical-details > :not(summary) {
+  margin-inline: 1.15rem;
+}
+.technical-details > pre {
+  margin-bottom: 1.15rem;
 }
 .matrix {
   display: grid;
@@ -531,6 +703,10 @@ footer {
   }
   .number-record {
     grid-template-columns: 2.5rem 1fr;
+  }
+  .plain-facts div {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
   }
   .how {
     margin-top: 2rem;

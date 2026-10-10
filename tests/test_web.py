@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import httpx
 import pytest
 
@@ -51,6 +53,13 @@ async def test_result_evidence_receipt_limits_and_sweep_routes_render(db_path):
     receipt = (await client.get(f"/receipt/{search_id}")).text
     assert "demo-receipt" in receipt
     assert "api_key" not in receipt
+    assert "Saved search evidence" in receipt
+    assert "What was searched" in receipt
+    assert "What was found" in receipt
+    assert "How to check this evidence" in receipt
+    assert "Advanced technical details" in receipt
+    assert "<details" in receipt
+    assert "<summary>Advanced technical details</summary>" in receipt
     await client.aclose()
 
 
@@ -123,6 +132,32 @@ async def test_post_check_accepts_a_free_text_brand(db_path):
 
 
 @pytest.mark.asyncio
+async def test_local_branch_brand_inherits_verified_seeded_owner(db_path, monkeypatch):
+    captured = None
+
+    async def fake_number_check(_self, _number, brand, location=None):
+        nonlocal captured
+        captured = brand
+        assert location is None
+        return SimpleNamespace(id="captured-check")
+
+    monkeypatch.setattr("sahi.web.app.Pipeline.number_check", fake_number_check)
+    client, _store, _demo_id = build_client(db_path)
+
+    response = await client.post(
+        "/number",
+        data={"number": "0482-2258058", "brand": "SBI Bank Valavoor"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert captured.name == "SBI Bank Valavoor"
+    assert captured.official_domain == "sbi.bank.in"
+    assert captured.domain_verified is True
+    await client.aclose()
+
+
+@pytest.mark.asyncio
 async def test_live_footer_shows_monthly_and_hourly_quota(db_path, monkeypatch):
     async def fake_credits(_self):
         return 123
@@ -160,4 +195,54 @@ async def test_number_tab_submits_and_explains_brandless_result(db_path):
     assert result.status_code == 200
     assert "No verdict without a brand" in result.text
     assert "example-air.test" in result.text
+    assert "Toll-free" in result.text
+    assert "What Google results say" in result.text
+    assert "This is a clue, not proof" in result.text
+    assert 'class="claim-list"' in result.text
+    assert "Open the saved search evidence" in result.text
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_hindi_receipt_uses_plain_language_and_keeps_json_optional(db_path):
+    client, store, _demo_id = build_client(db_path)
+    search_id = store.list_searches()[0]["id"]
+
+    receipt = (await client.get(f"/receipt/{search_id}?ui=hi")).text
+
+    assert "सुरक्षित खोज प्रमाण" in receipt
+    assert "क्या खोजा गया" in receipt
+    assert "इस प्रमाण की जाँच कैसे करें" in receipt
+    assert "तकनीकी जानकारी" in receipt
+    assert "<details" in receipt
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_location_suggestions_endpoint_returns_indian_canonical_names(db_path, monkeypatch):
+    async def suggestions(query, limit=8):
+        assert query == "vala"
+        assert limit == 8
+        return [
+            {
+                "name": "Valavoor",
+                "canonical_name": "Valavoor, Kerala, India",
+                "target_type": "Neighborhood",
+            }
+        ]
+
+    monkeypatch.setattr("sahi.web.app.suggest_locations", suggestions)
+    client, _store, _demo_id = build_client(db_path)
+    response = await client.get("/api/locations?q=vala")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "name": "Valavoor",
+            "canonical_name": "Valavoor, Kerala, India",
+            "target_type": "Neighborhood",
+        }
+    ]
+    home = await client.get("/")
+    assert 'data-location-suggest="true"' in home.text
     await client.aclose()

@@ -1,2 +1,62 @@
 {% extends "base.html" %}
-{% block content %}<section class="page"><a class="back" href="javascript:history.back()">← {{ copy.back }}</a><h1>{{ copy.search_receipt }}</h1><dl class="receipt-meta"><div><dt>{{ copy.engine }}</dt><dd>{{ receipt.engine }}</dd></div><div><dt>{{ copy.serpapi_id }}</dt><dd>{{ receipt.serpapi_id or copy.unavailable }}</dd></div><div><dt>{{ copy.fetched }}</dt><dd>{{ receipt.fetched_at }}</dd></div></dl><h2>{{ copy.parameters }}</h2><pre>{{ params }}</pre><h2>{{ copy.scrubbed }}</h2><pre>{{ body }}</pre></section>{% endblock %}
+{% block title %}{{ copy.saved_evidence }} · Sahi Number{% endblock %}
+{% block content %}
+<section class="page receipt-page">
+  <a class="back" href="javascript:history.back()">← {{ copy.back }}</a>
+  <p class="eyebrow">{{ copy.search_receipt }}</p>
+  <h1>{{ copy.saved_evidence }}</h1>
+  <p class="receipt-intro">{{ copy.receipt_intro }}</p>
+
+  <section class="receipt-section" aria-labelledby="searched-heading">
+    <h2 id="searched-heading">{{ copy.what_searched }}</h2>
+    <dl class="plain-facts">
+      <div><dt>{{ copy.search_service }}</dt><dd>{{ engine_name }}</dd></div>
+      <div><dt>{{ copy.search_words }}</dt><dd>{{ query }}</dd></div>
+      <div><dt>{{ copy.search_place }}</dt><dd>{{ location }}</dd></div>
+      <div><dt>{{ copy.search_language_label }}</dt><dd>{{ search_language }}</dd></div>
+      <div><dt>{{ copy.search_status }}</dt><dd>{{ receipt_status }}</dd></div>
+      <div><dt>{{ copy.saved_on }}</dt><dd>{{ saved_on }}</dd></div>
+    </dl>
+  </section>
+
+  <section class="receipt-section" aria-labelledby="found-heading">
+    <h2 id="found-heading">{{ copy.found_heading }}</h2>
+    {% if findings %}
+    <p>{{ copy.found_intro }}</p>
+    <ul class="finding-list">
+      {% for item in findings %}
+      <li>
+        <h3>{{ item.title }}</h3>
+        <ul class="finding-facts">
+          <li><strong>{{ copy.phone_found }}:</strong> {{ item.phone }}</li>
+          <li><strong>{{ copy.website }}:</strong> {{ item.domain or copy.unavailable }}</li>
+          <li><strong>{{ copy.result_type }}:</strong> {{ item.surface }}</li>
+        </ul>
+        {% if item.is_government %}<span class="source-label trusted">{{ copy.government_site }}</span>{% else %}<span class="source-label">{{ copy.other_site }}</span>{% endif %}
+        {% if item.link %}<p><a class="evidence-link" href="{{ item.link }}" rel="noreferrer">{{ copy.open_source }} ↗</a></p>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}<p>{{ copy.no_receipt_findings }}</p>{% endif %}
+  </section>
+
+  <section class="verify-guide" aria-labelledby="verify-heading">
+    <h2 id="verify-heading">{{ copy.how_verify_receipt }}</h2>
+    <ol>{% for step in copy.receipt_steps %}<li>{{ step }}</li>{% endfor %}</ol>
+  </section>
+
+  <details class="technical-details">
+    <summary>{{ copy.advanced_details }}</summary>
+    <p>{{ copy.advanced_intro }}</p>
+    <dl class="receipt-meta">
+      <div><dt>{{ copy.receipt_number }}</dt><dd>{{ receipt.id }}</dd></div>
+      <div><dt>{{ copy.engine }}</dt><dd>{{ receipt.engine }}</dd></div>
+      <div><dt>{{ copy.serpapi_id }}</dt><dd>{{ receipt.serpapi_id or copy.unavailable }}</dd></div>
+    </dl>
+    <h3>{{ copy.parameters }}</h3>
+    <pre>{{ params }}</pre>
+    <h3>{{ copy.scrubbed }}</h3>
+    <pre>{{ body }}</pre>
+  </details>
+</section>
+{% endblock %}

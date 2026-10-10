@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 import re
 import uuid
+from datetime import datetime
 from html import escape
 from pathlib import Path
 from typing import Any
 
+import httpx
 import yaml
 from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -15,10 +17,11 @@ from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 
 from sahi.config import ROOT, Settings, get_settings
-from sahi.extract.phones import PhoneClass, display_phone, normalise_phone
+from sahi.extract.phones import PhoneClass, display_phone, normalise_phone, primary_search_query
 from sahi.extract.walker import walk_response
 from sahi.pipeline import Pipeline
 from sahi.reference import Brand, load_brands
+from sahi.serp.account import suggest_locations
 from sahi.serp.client import SerpClient, make_cache_key
 from sahi.signals import compute_signals
 from sahi.store import Store
@@ -45,6 +48,8 @@ COPY = {
         "brand_hint": "Choose or type a brand",
         "city": "City",
         "city_hint": "Type any Indian city, town or locality",
+        "number_location": "Search location (optional)",
+        "number_location_hint": "Add your city or locality for closer local results",
         "search_language": "Search language",
         "phone": "Phone number",
         "brand_optional": "Brand (optional)",
@@ -66,6 +71,37 @@ COPY = {
         ),
         "domains": "Domains showing this number",
         "no_appearances": "No appearances were found in the stored receipt.",
+        "number_type": "Number type",
+        "phone_types": {
+            "TOLL_FREE": "Toll-free",
+            "UAN": "Shared-cost / UAN",
+            "MOBILE": "Mobile",
+            "LANDLINE": "Landline",
+            "SHORT_CODE": "Short code",
+            "FOREIGN": "International number",
+        },
+        "claims": "What search results claim",
+        "claims_body": (
+            "These result titles associate the number with the names below. This is useful "
+            "attribution evidence, but it is not a verified brand reference."
+        ),
+        "claims_plain": "What Google results say",
+        "claims_plain_body": (
+            "Google showed this phone number next to the names below. "
+            "This is a clue, not proof that the number belongs to them."
+        ),
+        "result_says": "Result says",
+        "website": "Website",
+        "government_site": "Government website",
+        "brand_site": "Brand website",
+        "other_site": "Other website — check it carefully",
+        "open_saved_evidence": "Open the saved search evidence",
+        "claims_check_title": "Before you trust it",
+        "claims_check_steps": [
+            "Check that the full phone number is the same.",
+            "Prefer the brand's own website, app, card or bill.",
+            "Treat search titles and other websites as clues, not proof.",
+        ],
         "back": "Back to check",
         "sightings": "Sightings",
         "signals": "Signals",
@@ -73,7 +109,7 @@ COPY = {
         "references": "Reference sources checked",
         "collecting": "Collecting evidence…",
         "collecting_body": ("This page updates as Search, Ads, Maps and AI evidence completes."),
-        "published_refs": "Brand and public-directory references",
+        "published_refs": "Brand and trusted-source references",
         "unconfirmed": "Unconfirmed domain",
         "compared_brand": "Compared with brand",
         "no_reference": "No stored reference number was available.",
@@ -86,6 +122,33 @@ COPY = {
         "matrix_body": "The web view never triggers a sweep. It reads completed cells only.",
         "no_matrix": "No stored sweep cells yet.",
         "search_receipt": "Search receipt",
+        "saved_evidence": "Saved search evidence",
+        "receipt_intro": (
+            "This page is a saved copy of one search. It shows what the search service "
+            "returned at that time; it does not prove that every result is correct."
+        ),
+        "what_searched": "What was searched",
+        "search_service": "Search service",
+        "search_words": "Search words",
+        "search_place": "Place",
+        "search_language_label": "Language",
+        "search_status": "Search status",
+        "saved_on": "Saved on",
+        "found_heading": "What was found",
+        "found_intro": "These results contained a phone number.",
+        "no_receipt_findings": "No phone number was found in this saved search.",
+        "phone_found": "Phone number shown",
+        "result_type": "Where it appeared",
+        "open_source": "Open the result website",
+        "how_verify_receipt": "How to check this evidence",
+        "receipt_steps": [
+            "Check that the phone number is exactly the same, including the area code.",
+            "Read the website name and result title. A search result can be wrong or outdated.",
+            "For a final check, use the brand's official website, app, card or bill.",
+        ],
+        "advanced_details": "Advanced technical details",
+        "advanced_intro": "For auditors and developers. Most people do not need this section.",
+        "receipt_number": "Receipt number",
         "engine": "Engine",
         "serpapi_id": "SerpApi ID",
         "unavailable": "Unavailable",
@@ -125,6 +188,8 @@ COPY = {
         "brand_hint": "ब्रांड चुनें या लिखें",
         "city": "शहर",
         "city_hint": "भारत का कोई भी शहर, कस्बा या इलाका लिखें",
+        "number_location": "खोज का स्थान (वैकल्पिक)",
+        "number_location_hint": "बेहतर स्थानीय परिणामों के लिए शहर या इलाका जोड़ें",
         "search_language": "खोज की भाषा",
         "phone": "फ़ोन नंबर",
         "brand_optional": "ब्रांड (वैकल्पिक)",
@@ -145,6 +210,37 @@ COPY = {
         ),
         "domains": "यह नंबर दिखाने वाले डोमेन",
         "no_appearances": "संग्रहीत रसीद में यह नंबर नहीं मिला।",
+        "number_type": "नंबर का प्रकार",
+        "phone_types": {
+            "TOLL_FREE": "टोल-फ्री",
+            "UAN": "शेयर्ड-कॉस्ट / UAN",
+            "MOBILE": "मोबाइल",
+            "LANDLINE": "लैंडलाइन",
+            "SHORT_CODE": "शॉर्ट कोड",
+            "FOREIGN": "अंतरराष्ट्रीय नंबर",
+        },
+        "claims": "खोज परिणाम क्या दावा करते हैं",
+        "claims_body": (
+            "ये परिणाम शीर्षक नंबर को नीचे दिए नामों से जोड़ते हैं। यह उपयोगी पहचान "
+            "साक्ष्य है, लेकिन सत्यापित ब्रांड संदर्भ नहीं है।"
+        ),
+        "claims_plain": "Google के परिणाम क्या कहते हैं",
+        "claims_plain_body": (
+            "Google ने इस फ़ोन नंबर के साथ नीचे दिए नाम दिखाए। यह एक संकेत है, "
+            "लेकिन इस बात का प्रमाण नहीं कि नंबर उन्हीं का है।"
+        ),
+        "result_says": "परिणाम में लिखा है",
+        "website": "वेबसाइट",
+        "government_site": "सरकारी वेबसाइट",
+        "brand_site": "ब्रांड की वेबसाइट",
+        "other_site": "अन्य वेबसाइट — ध्यान से जाँचें",
+        "open_saved_evidence": "सुरक्षित खोज प्रमाण खोलें",
+        "claims_check_title": "भरोसा करने से पहले",
+        "claims_check_steps": [
+            "देखें कि पूरा फ़ोन नंबर बिल्कुल वही है।",
+            "ब्रांड की अपनी वेबसाइट, ऐप, कार्ड या बिल को प्राथमिकता दें।",
+            "खोज शीर्षक और अन्य वेबसाइटों को संकेत मानें, प्रमाण नहीं।",
+        ],
         "back": "जाँच पर वापस जाएँ",
         "sightings": "दिखने के स्थान",
         "signals": "संकेत",
@@ -152,7 +248,7 @@ COPY = {
         "references": "जाँचे गए संदर्भ स्रोत",
         "collecting": "सबूत जुटाए जा रहे हैं…",
         "collecting_body": "Search, Ads, Maps और AI सबूत पूरा होते ही यह पेज अपडेट होता है।",
-        "published_refs": "ब्रांड और सार्वजनिक निर्देशिका संदर्भ",
+        "published_refs": "ब्रांड और विश्वसनीय स्रोत संदर्भ",
         "unconfirmed": "अपुष्ट डोमेन",
         "compared_brand": "इस ब्रांड से तुलना",
         "no_reference": "कोई संग्रहीत संदर्भ नंबर उपलब्ध नहीं था।",
@@ -165,6 +261,33 @@ COPY = {
         "matrix_body": "वेब दृश्य समूह जाँच शुरू नहीं करता; यह केवल पूरी कोशिकाएँ पढ़ता है।",
         "no_matrix": "अभी कोई संग्रहीत समूह-जाँच कोशिका नहीं है।",
         "search_receipt": "खोज रसीद",
+        "saved_evidence": "सुरक्षित खोज प्रमाण",
+        "receipt_intro": (
+            "यह एक खोज की सुरक्षित प्रति है। यह दिखाती है कि उस समय खोज सेवा ने क्या "
+            "दिखाया था; इससे हर परिणाम सही साबित नहीं होता।"
+        ),
+        "what_searched": "क्या खोजा गया",
+        "search_service": "खोज सेवा",
+        "search_words": "खोज के शब्द",
+        "search_place": "स्थान",
+        "search_language_label": "भाषा",
+        "search_status": "खोज की स्थिति",
+        "saved_on": "सुरक्षित करने का समय",
+        "found_heading": "क्या मिला",
+        "found_intro": "इन परिणामों में फ़ोन नंबर मिला।",
+        "no_receipt_findings": "इस सुरक्षित खोज में कोई फ़ोन नंबर नहीं मिला।",
+        "phone_found": "दिखाया गया फ़ोन नंबर",
+        "result_type": "कहाँ दिखाई दिया",
+        "open_source": "परिणाम की वेबसाइट खोलें",
+        "how_verify_receipt": "इस प्रमाण की जाँच कैसे करें",
+        "receipt_steps": [
+            "क्षेत्र कोड सहित पूरा फ़ोन नंबर मिलाएँ।",
+            "वेबसाइट का नाम और परिणाम का शीर्षक पढ़ें। खोज परिणाम गलत या पुराने हो सकते हैं।",
+            "अंतिम जाँच के लिए ब्रांड की आधिकारिक वेबसाइट, ऐप, कार्ड या बिल देखें।",
+        ],
+        "advanced_details": "तकनीकी जानकारी",
+        "advanced_intro": "यह लेखा-जाँच और डेवलपर के लिए है। अधिकतर लोगों को इसकी जरूरत नहीं है।",
+        "receipt_number": "रसीद संख्या",
         "engine": "इंजन",
         "serpapi_id": "SerpApi आईडी",
         "unavailable": "उपलब्ध नहीं",
@@ -318,7 +441,13 @@ def seed_demo_check(store: Store) -> str:
         ]
     )
     number_match = normalise_phone("1800 123 456")
-    number_params = {**common, "q": " OR ".join(number_match.search_variants), "hl": "en"}
+    number_params = {
+        **common,
+        "q": primary_search_query(number_match),
+        "hl": "en",
+        "nfpr": "1",
+        "filter": "0",
+    }
     cached_steps.append(("google", number_params, helpline_body, "demo-number"))
     for engine, parameters, response_body, receipt in cached_steps:
         key = make_cache_key(engine, parameters)
@@ -425,6 +554,88 @@ def _decode_rows(details: dict[str, Any]) -> dict[str, Any]:
     return details
 
 
+def _plain_engine_name(engine: str, ui: str = "en") -> str:
+    labels = {
+        "google": "Google Search",
+        "google_maps": "Google Maps",
+        "google_maps_reviews": "Google Maps reviews",
+        "google_ads": "Google advertisements",
+        "google_ai_overview": "Google AI Overview",
+        "demo": "Demonstration search",
+    }
+    hindi_labels = {
+        "google": "Google खोज",
+        "google_maps": "Google Maps",
+        "google_maps_reviews": "Google Maps समीक्षाएँ",
+        "google_ads": "Google विज्ञापन",
+        "google_ai_overview": "Google AI सारांश",
+        "demo": "प्रदर्शन खोज",
+    }
+    return (hindi_labels if ui == "hi" else labels).get(
+        engine, engine.replace("_", " ").title()
+    )
+
+
+def _plain_surface_name(surface: str, ui: str = "en") -> str:
+    labels = {
+        "ORGANIC": "Search result",
+        "ANSWER_BOX": "Answer box",
+        "KNOWLEDGE_GRAPH": "Information panel",
+        "AI_OVERVIEW": "AI overview",
+        "LOCAL_PACK": "Local result",
+        "MAPS_LISTING": "Maps listing",
+        "AD": "Advertisement",
+        "RELATED_QUESTION": "Related question",
+    }
+    hindi_labels = {
+        "ORGANIC": "खोज परिणाम",
+        "ANSWER_BOX": "उत्तर बॉक्स",
+        "KNOWLEDGE_GRAPH": "जानकारी पैनल",
+        "AI_OVERVIEW": "AI सारांश",
+        "LOCAL_PACK": "स्थानीय परिणाम",
+        "MAPS_LISTING": "Maps सूची",
+        "AD": "विज्ञापन",
+        "RELATED_QUESTION": "संबंधित प्रश्न",
+    }
+    return (hindi_labels if ui == "hi" else labels).get(
+        surface, surface.replace("_", " ").title()
+    )
+
+
+def _readable_timestamp(value: str) -> str:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return value
+    return parsed.strftime("%d %B %Y, %I:%M %p %Z").replace(" 0", " ")
+
+
+def _receipt_findings(
+    body: dict[str, Any], search_id: int, engine: str, ui: str = "en"
+) -> list[dict[str, Any]]:
+    findings: list[dict[str, Any]] = []
+    seen: set[tuple[str, str | None, str | None]] = set()
+    for item in walk_response(body, search_id, engine):
+        key = (item.canonical, item.title, item.link)
+        if key in seen:
+            continue
+        seen.add(key)
+        findings.append(
+            {
+                "phone": display_phone(item.canonical),
+                "title": item.title or _plain_surface_name(item.surface, ui),
+                "domain": item.domain,
+                "link": item.link,
+                "surface": _plain_surface_name(item.surface, ui),
+                "is_government": bool(
+                    item.domain
+                    and (item.domain.endswith(".gov.in") or item.domain.endswith(".nic.in"))
+                ),
+            }
+        )
+    return findings
+
+
 def _render_simple_markdown(source: str) -> Markup:
     """Render the small, trusted headings-and-list subset used by LIMITS.md."""
 
@@ -495,7 +706,8 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
 
     def resolve_brand(value: str) -> Brand:
         cleaned = value.strip()
-        for item in load_brands():
+        brands = load_brands()
+        for item in brands:
             names = {
                 item.id.casefold(),
                 item.name.casefold(),
@@ -503,6 +715,21 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
             }
             if cleaned.casefold() in names:
                 return item
+        for item in brands:
+            owner_names = (item.name, *item.aliases)
+            if item.domain_verified and any(
+                re.search(rf"\b{re.escape(name.casefold())}\b", cleaned.casefold())
+                for name in owner_names
+            ):
+                return Brand(
+                    id=f"{item.id}-{uuid.uuid5(uuid.NAMESPACE_URL, cleaned).hex[:10]}",
+                    name=cleaned,
+                    official_domain=item.official_domain,
+                    aliases=item.aliases,
+                    contact_urls=item.contact_urls,
+                    official_numbers=item.official_numbers,
+                    domain_verified=True,
+                )
         brand_id = re.sub(r"[^a-z0-9]+", "-", cleaned.casefold()).strip("-")
         if not brand_id:
             raise HTTPException(400, "Enter a brand name")
@@ -514,6 +741,16 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
         cities = yaml.safe_load((ROOT / "seeds" / "cities.yaml").read_text()) or []
         context.update({"brands": load_brands(), "cities": cities})
         return templates.TemplateResponse(request, "index.html", context)
+
+    @application.get("/api/locations", response_model=list[dict[str, str]])
+    async def location_suggestions(q: str = ""):
+        cleaned = " ".join(q.split())
+        if len(cleaned) < 2:
+            return []
+        try:
+            return await suggest_locations(cleaned, limit=8)
+        except httpx.HTTPError:
+            return []
 
     @application.post("/check")
     async def create_check(
@@ -537,10 +774,15 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
         return RedirectResponse(f"/check/{check_id}", status_code=303)
 
     @application.post("/number")
-    async def create_number_check(number: str = Form(...), brand: str = Form("")):
+    async def create_number_check(
+        number: str = Form(...), brand: str = Form(""), location: str = Form("")
+    ):
         selected = resolve_brand(brand) if brand.strip() else None
+        cleaned_location = " ".join(location.split()) or None
         try:
-            result = await Pipeline(settings, store, serp_client).number_check(number, selected)
+            result = await Pipeline(settings, store, serp_client).number_check(
+                number, selected, cleaned_location
+            )
         except ValueError as error:
             raise HTTPException(400, str(error)) from error
         return RedirectResponse(f"/number/{result.id}", status_code=303)
@@ -552,7 +794,17 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
             raise HTTPException(404, "Number check not found")
         details = _decode_rows(details)
         domains: dict[str, list[dict[str, Any]]] = {}
+        seen_domain_rows: set[tuple[Any, ...]] = set()
         for item in details["sightings"]:
+            key = (
+                item.get("search_id"),
+                item.get("canonical"),
+                item.get("link"),
+                item.get("title"),
+            )
+            if key in seen_domain_rows:
+                continue
+            seen_domain_rows.add(key)
             domains.setdefault(item["domain"] or "unknown", []).append(item)
         brand_record = None
         references: list[dict[str, Any]] = []
@@ -574,6 +826,24 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
             if details["sightings"]
             else details["brand_text"]
         )
+        normalized = normalise_phone(canonical)
+        seen_claims: set[tuple[str, str]] = set()
+        claims: list[dict[str, Any]] = []
+        for item in details["sightings"]:
+            title = item.get("title") or item.get("surface") or "Search result"
+            key = (str(title), str(item.get("domain") or "unknown"))
+            if key in seen_claims:
+                continue
+            seen_claims.add(key)
+            claim = dict(item)
+            domain = str(item.get("domain") or "")
+            claim["is_brand_site"] = bool(
+                brand_record
+                and brand_record.get("official_domain")
+                and domain == brand_record["official_domain"]
+            )
+            claim["is_government"] = domain.endswith((".gov.in", ".nic.in"))
+            claims.append(claim)
         context = await base_context(request, ui)
         context.update(
             {
@@ -581,6 +851,8 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
                 "domains": domains,
                 "canonical": canonical,
                 "display": display_phone(canonical),
+                "number_kind": normalized.kind.value if normalized else None,
+                "claims": claims,
                 "brand_record": brand_record,
                 "references": references,
             }
@@ -692,12 +964,29 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
         row = store.get_search(search_id)
         if not row:
             raise HTTPException(404, "Receipt not found")
+        params_data = json.loads(row["params_json"])
+        body_data = json.loads(row["body_json"])
         context = await base_context(request, ui)
         context.update(
             {
                 "receipt": row,
-                "params": json.dumps(json.loads(row["params_json"]), indent=2, ensure_ascii=False),
-                "body": json.dumps(json.loads(row["body_json"]), indent=2, ensure_ascii=False),
+                "engine_name": _plain_engine_name(row["engine"], context["ui"]),
+                "query": params_data.get("q") or params_data.get("query") or "—",
+                "location": params_data.get("location") or "India",
+                "search_language": (
+                    {"en": "अंग्रेज़ी", "hi": "हिंदी"}
+                    if context["ui"] == "hi"
+                    else {"en": "English", "hi": "Hindi"}
+                ).get(params_data.get("hl"), params_data.get("hl") or "—"),
+                "receipt_status": (
+                    "सफल" if context["ui"] == "hi" and row["status"] == "Success" else row["status"]
+                ),
+                "saved_on": _readable_timestamp(row["fetched_at"]),
+                "findings": _receipt_findings(
+                    body_data, search_id, row["engine"], context["ui"]
+                ),
+                "params": json.dumps(params_data, indent=2, ensure_ascii=False),
+                "body": json.dumps(body_data, indent=2, ensure_ascii=False),
             }
         )
         return templates.TemplateResponse(request, "receipt.html", context)

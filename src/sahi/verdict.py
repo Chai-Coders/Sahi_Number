@@ -44,6 +44,11 @@ def decide(
                 Verdict.OFFICIAL_MATCH,
                 ("Found in a matching Indian public-authority directory",),
             )
+        if sources == {"STATUTORY_REGULATOR"}:
+            return Decision(
+                Verdict.OFFICIAL_MATCH,
+                ("Found on a matching statutory-regulator or national-infrastructure page",),
+            )
         return Decision(Verdict.OFFICIAL_MATCH, ("Found in the brand's published references",))
     reasons = ["Checked the brand's published reference numbers"]
     reasons.extend(
