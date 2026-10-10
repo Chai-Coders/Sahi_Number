@@ -87,7 +87,7 @@ async def test_hindi_replay_check_has_complete_fictional_verdicts(db_path):
     assert result.status_code == 200
     assert "OFFICIAL_MATCH" in result.text
     assert "CONFLICT" in result.text
-    assert "ब्रांड की आधिकारिक वेबसाइट पर मिला" in result.text
+    assert "विश्वसनीय संदर्भ में मिला" in result.text
     await client.aclose()
 
 
@@ -118,6 +118,7 @@ async def test_post_check_accepts_a_free_text_brand(db_path):
     assert result.status_code == 200
     assert "Owner Supplied Brand" in result.text
     assert "No official domain is configured" in result.text
+    assert "Unconfirmed domain" not in result.text
     await client.aclose()
 
 

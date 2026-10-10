@@ -33,3 +33,14 @@ def test_reasons_are_fixed_and_signal_order_is_stable():
         "Number type differs from every published reference number",
         "No result on the official domain showed this number",
     )
+
+
+def test_public_directory_match_is_explained_as_public_authority_evidence():
+    decision = decide(
+        "+914822258058",
+        {"+914822258058"},
+        {},
+        {"+914822258058": {"GOVERNMENT_DIRECTORY"}},
+    )
+    assert decision.verdict == Verdict.OFFICIAL_MATCH
+    assert decision.reasons == ("Found in a matching Indian public-authority directory",)

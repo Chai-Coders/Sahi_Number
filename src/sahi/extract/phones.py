@@ -50,32 +50,80 @@ def ascii_digits(text: str) -> str:
     return "".join(result)
 
 
-def _variants(digits: str, kind: PhoneClass) -> tuple[str, ...]:
+def _quoted_unique(*values: str) -> tuple[str, ...]:
+    variants: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        cleaned = re.sub(r"\s+", " ", value.strip())
+        if not cleaned or cleaned in seen:
+            continue
+        variants.append(f'"{cleaned}"')
+        seen.add(cleaned)
+    return tuple(variants)
+
+
+def _variants(raw: str, digits: str, kind: PhoneClass, canonical: str) -> tuple[str, ...]:
     if kind == PhoneClass.TOLL_FREE and len(digits) in {10, 11}:
         tail = digits[4:]
         grouped = f"1800 {tail[:3]} {tail[3:]}"
         dashed = f"1800-{tail[:3]}-{tail[3:]}"
-        return (f'"{digits}"', f'"{grouped}"', f'"{dashed}"')
+        return _quoted_unique(digits, grouped, dashed, raw)
     if kind == PhoneClass.UAN:
         tail = digits[4:]
-        return (
-            f'"{digits}"',
-            f'"1860 {tail[:3]} {tail[3:]}"',
-            f'"1860-{tail[:3]}-{tail[3:]}"',
+        return _quoted_unique(
+            digits,
+            f"1860 {tail[:3]} {tail[3:]}",
+            f"1860-{tail[:3]}-{tail[3:]}",
+            raw,
         )
-    if kind in {PhoneClass.MOBILE, PhoneClass.LANDLINE}:
-        local = digits[-10:]
-        return (f'"+91{local}"', f'"{local}"', f'"{local[:5]} {local[5:]}"')
-    return (f'"{digits}"',)
+    if kind in {PhoneClass.MOBILE, PhoneClass.LANDLINE, PhoneClass.FOREIGN}:
+        try:
+            parsed = phonenumbers.parse(canonical, None)
+            e164 = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+            national = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.NATIONAL)
+            international = phonenumbers.format_number(
+                parsed, phonenumbers.PhoneNumberFormat.INTERNATIONAL
+            )
+        except phonenumbers.NumberParseException:
+            e164 = canonical
+            national = digits
+            international = canonical
+        national_digits = re.sub(r"\D", "", national)
+        return _quoted_unique(
+            e164,
+            e164.lstrip("+"),
+            national_digits,
+            national,
+            international,
+            raw,
+        )
+    return _quoted_unique(digits)
 
 
 def _build(raw: str, digits: str, kind: PhoneClass, canonical: str) -> PhoneMatch:
     display = canonical
-    if kind == PhoneClass.MOBILE:
-        display = f"+91 {canonical[-10:-5]} {canonical[-5:]}"
-    elif kind == PhoneClass.LANDLINE:
-        display = f"+91 {canonical[-10:-6]} {canonical[-6:]}"
-    return PhoneMatch(canonical, raw.strip(), kind, display, _variants(digits, kind))
+    if kind in {PhoneClass.MOBILE, PhoneClass.LANDLINE, PhoneClass.FOREIGN}:
+        try:
+            parsed = phonenumbers.parse(canonical, None)
+            display = phonenumbers.format_number(
+                parsed, phonenumbers.PhoneNumberFormat.INTERNATIONAL
+            )
+        except phonenumbers.NumberParseException:
+            pass
+    return PhoneMatch(
+        canonical,
+        raw.strip(),
+        kind,
+        display,
+        _variants(raw, digits, kind, canonical),
+    )
+
+
+def display_phone(value: str) -> str:
+    """Return a human-readable international rendering without changing identity."""
+
+    match = normalise_phone(value)
+    return match.display if match else value
 
 
 def normalise_phone(value: str) -> PhoneMatch | None:

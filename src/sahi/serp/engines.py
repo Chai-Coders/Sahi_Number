@@ -47,6 +47,50 @@ async def search_official_site(
     )
 
 
+async def search_brand_identity(
+    client: SerpClient,
+    budget: SearchBudget,
+    brand: str,
+    settings: Settings,
+    *,
+    fresh: bool = False,
+) -> SearchResult:
+    """Find a knowledge-graph website for an unseeded brand."""
+
+    return await client.search(
+        "google",
+        {
+            **GOOGLE_COMMON,
+            "q": f'"{brand}" official website contact',
+            "hl": "en",
+            "device": settings.device,
+        },
+        budget,
+        ttl=86400,
+        fresh=fresh,
+    )
+
+
+async def search_public_directory(
+    client: SerpClient,
+    budget: SearchBudget,
+    brand: str,
+    location: str | None = None,
+    *,
+    fresh: bool = False,
+) -> SearchResult:
+    """Find a matching public-authority directory entry for a local branch."""
+
+    params = {
+        **GOOGLE_COMMON,
+        "q": f'"{brand}" (site:nic.in OR site:gov.in)',
+        "hl": "en",
+    }
+    if location:
+        params["location"] = location
+    return await client.search("google", params, budget, ttl=86400, fresh=fresh)
+
+
 async def search_maps(
     client: SerpClient,
     budget: SearchBudget,

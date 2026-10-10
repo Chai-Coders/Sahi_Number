@@ -12,7 +12,12 @@ import yaml
 from sahi.config import ROOT, Settings
 from sahi.extract.phones import PhoneClass
 from sahi.extract.walker import Sighting, registrable_domain, walk_response
-from sahi.reference import Brand, ReferenceNumber, build_reference_set
+from sahi.reference import (
+    Brand,
+    ReferenceNumber,
+    build_public_directory_references,
+    build_reference_set,
+)
 from sahi.serp.account import resolve_location
 from sahi.serp.client import (
     BudgetExceeded,
@@ -26,10 +31,12 @@ from sahi.serp.engines import (
     fetch_reviews,
     redeem_ai_overview,
     search_ads,
+    search_brand_identity,
     search_helpline,
     search_maps,
     search_number,
     search_official_site,
+    search_public_directory,
 )
 from sahi.signals import compute_signals
 from sahi.store import Store
@@ -169,8 +176,14 @@ class Pipeline:
                 if self.settings.enable_ads
                 else None,
             ),
+            attempt(
+                "Public-directory search",
+                lambda: search_public_directory(
+                    self.client, budget, brand.name, search_location, fresh=fresh
+                ),
+            ),
         )
-        helpline_result, official_result, maps_result, ads_result = initial
+        helpline_result, official_result, maps_result, ads_result, directory_result = initial
 
         effective_brand = brand
         if not brand.official_domain and helpline_result:
@@ -216,8 +229,13 @@ class Pipeline:
         references, reference_failures = await build_reference_set(
             effective_brand, official_result.body if official_result else {}, self.store
         )
+        directory_references, directory_failures = await build_public_directory_references(
+            effective_brand, directory_result.body if directory_result else {}, self.store
+        )
+        references.extend(directory_references)
         self.store.save_brand_references(effective_brand, references)
         skipped.extend(reference_failures)
+        skipped.extend(directory_failures)
         self.store.save_check_step(
             check_id,
             "Official references",
@@ -231,6 +249,9 @@ class Pipeline:
         for item in sightings:
             by_number.setdefault(item.canonical, []).append(item)
         reference_values = {item.canonical for item in references}
+        reference_sources: dict[str, set[str]] = {}
+        for item in references:
+            reference_sources.setdefault(item.canonical, set()).add(item.source_kind)
 
         number_bodies: dict[str, list[dict[str, Any]]] = {}
         for canonical, _items in sorted(
@@ -311,7 +332,7 @@ class Pipeline:
                 warning_terms=warning_terms,
                 number_search_ran=canonical in number_bodies,
             )
-            decision = decide(canonical, reference_values, signals)
+            decision = decide(canonical, reference_values, signals, reference_sources)
             all_signals[canonical] = signals
             results.append(
                 NumberResult(
@@ -376,14 +397,60 @@ class Pipeline:
         signals: dict[str, dict[str, Any]] = {}
         decision = None
         skipped: list[str] = []
+        effective_brand = brand
         if brand:
+            directory_result: SearchResult | None = None
+            try:
+                directory_result = await search_public_directory(
+                    self.client, budget, brand.name, fresh=fresh
+                )
+                self.store.link_check_search(
+                    check_id, directory_result.search_id, "Public-directory search"
+                )
+            except (BudgetExceeded, ReplayMiss, SerpApiError) as error:
+                skipped.append(f"Public-directory search skipped: {error}")
+            if not brand.official_domain:
+                try:
+                    identity_result = await search_brand_identity(
+                        self.client,
+                        budget,
+                        brand.name,
+                        self.settings,
+                        fresh=fresh,
+                    )
+                    self.store.link_check_search(
+                        check_id, identity_result.search_id, "Brand identity search"
+                    )
+                except (BudgetExceeded, ReplayMiss, SerpApiError) as error:
+                    skipped.append(f"Brand identity search skipped: {error}")
+                else:
+                    knowledge_graph = identity_result.body.get("knowledge_graph", {})
+                    website = (
+                        knowledge_graph.get("website")
+                        if isinstance(knowledge_graph, dict)
+                        else None
+                    )
+                    candidate_domain = registrable_domain(str(website)) if website else None
+                    if candidate_domain:
+                        effective_brand = replace(
+                            brand,
+                            official_domain=candidate_domain,
+                            domain_verified=False,
+                        )
+                        skipped.append(
+                            f"Using unconfirmed domain from knowledge graph: {candidate_domain}"
+                        )
+                    else:
+                        skipped.append(
+                            "No official-domain candidate appeared in the brand knowledge graph"
+                        )
             official_body: dict[str, Any] = {}
-            if brand.official_domain:
+            if effective_brand and effective_brand.official_domain:
                 try:
                     official_result = await search_official_site(
                         self.client,
                         budget,
-                        brand.official_domain,
+                        effective_brand.official_domain,
                         fresh=fresh,
                     )
                     official_body = official_result.body
@@ -392,20 +459,33 @@ class Pipeline:
                     )
                 except (BudgetExceeded, ReplayMiss, SerpApiError) as error:
                     skipped.append(f"Official-site search skipped: {error}")
-            references, failures = await build_reference_set(brand, official_body, self.store)
+            references, failures = await build_reference_set(
+                effective_brand, official_body, self.store
+            )
+            directory_references, directory_failures = await build_public_directory_references(
+                effective_brand, directory_result.body if directory_result else {}, self.store
+            )
+            references.extend(directory_references)
             skipped.extend(failures)
-            self.store.save_brand_references(brand, references)
+            skipped.extend(directory_failures)
+            self.store.save_brand_references(effective_brand, references)
             signals = compute_signals(
                 normalized.canonical,
                 normalized.kind,
                 references,
                 sightings,
-                brand.official_domain,
+                effective_brand.official_domain,
                 number_results=[result.body],
                 number_search_ran=True,
             )
+            reference_sources: dict[str, set[str]] = {}
+            for item in references:
+                reference_sources.setdefault(item.canonical, set()).add(item.source_kind)
             decision = decide(
-                normalized.canonical, {item.canonical for item in references}, signals
+                normalized.canonical,
+                {item.canonical for item in references},
+                signals,
+                reference_sources,
             )
         finished = datetime.now(UTC)
         stored_verdicts: list[Any] = []
@@ -425,8 +505,8 @@ class Pipeline:
             {
                 "id": check_id,
                 "mode": "number",
-                "brand_id": brand.id if brand else None,
-                "brand_text": brand.name if brand else value,
+                "brand_id": effective_brand.id if effective_brand else None,
+                "brand_text": effective_brand.name if effective_brand else value,
                 "city": "Web",
                 "lang": "en",
                 "started_at": started.isoformat(),

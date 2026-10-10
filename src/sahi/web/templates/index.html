@@ -15,14 +15,15 @@
       <label>{{ copy.brand }}<input name="brand" list="brand-options" value="example-air" placeholder="{{ copy.brand_hint }}" required></label>
       <datalist id="brand-options">{% for brand in brands %}<option value="{{ brand.id }}">{{ brand.name }}</option>{% endfor %}</datalist>
       <div class="form-row">
-        <label>{{ copy.city }}<select name="city">{% for city in cities %}<option>{{ city }}</option>{% endfor %}</select></label>
+        <label>{{ copy.city }}<input name="city" list="city-options" value="Mumbai" placeholder="{{ copy.city_hint }}" maxlength="120" required></label>
+        <datalist id="city-options">{% for city in cities %}<option value="{{ city }}">{% endfor %}</datalist>
         <label>{{ copy.search_language }}<select name="lang"><option value="en">English</option><option value="hi">हिंदी</option></select></label>
       </div>
       <button class="primary" type="submit">{{ copy.run }}</button>
     </form>
     <form method="post" action="/number" class="check-form number-form">
       <label>{{ copy.phone }}<input name="number" inputmode="tel" placeholder="1800 123 456" required></label>
-      <label>{{ copy.brand_optional }}<select name="brand"><option value="">{{ copy.no_brand }}</option>{% for brand in brands %}<option value="{{ brand.id }}">{{ brand.name }}</option>{% endfor %}</select></label>
+      <label>{{ copy.brand_optional }}<input name="brand" list="brand-options" placeholder="{{ copy.brand_optional_hint }}" maxlength="120"></label>
       <button class="secondary" type="submit">{{ copy.number_tab }}</button>
     </form>
   </div>

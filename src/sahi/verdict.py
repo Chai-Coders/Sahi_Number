@@ -33,10 +33,17 @@ def decide(
     canonical: str,
     reference_set: Collection[str],
     signals: Mapping[str, object],
+    reference_sources: Mapping[str, Collection[str]] | None = None,
 ) -> Decision:
     if not reference_set:
         return Decision(Verdict.CANNOT_VERIFY, ("No published reference number was available",))
     if canonical in reference_set:
+        sources = set((reference_sources or {}).get(canonical, ()))
+        if sources == {"GOVERNMENT_DIRECTORY"}:
+            return Decision(
+                Verdict.OFFICIAL_MATCH,
+                ("Found in a matching Indian public-authority directory",),
+            )
         return Decision(Verdict.OFFICIAL_MATCH, ("Found in the brand's published references",))
     reasons = ["Checked the brand's published reference numbers"]
     reasons.extend(

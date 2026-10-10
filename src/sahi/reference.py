@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from html import unescape
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 import yaml
@@ -128,4 +129,61 @@ async def build_reference_set(
             continue
         text = " ".join(str(item.get(key, "")) for key in ("title", "snippet"))
         add(text, "OFFICIAL_SEARCH", link)
+    return references, failures
+
+
+def _is_public_authority_url(url: str) -> bool:
+    host = (urlsplit(url).hostname or "").casefold()
+    return (
+        host == "gov.in" or host.endswith(".gov.in") or host == "nic.in" or host.endswith(".nic.in")
+    )
+
+
+def _brand_terms(name: str) -> set[str]:
+    return {term for term in re.findall(r"[a-z0-9]{3,}", name.casefold())}
+
+
+async def build_public_directory_references(
+    brand: Brand,
+    directory_search: dict[str, Any],
+    store: Store | None = None,
+) -> tuple[list[ReferenceNumber], list[str]]:
+    """Collect branch numbers from a matching Indian public-authority directory.
+
+    These remain explicitly labelled as government-directory evidence rather
+    than being silently represented as pages controlled by the brand.
+    """
+
+    references: list[ReferenceNumber] = []
+    failures: list[str] = []
+    required_terms = _brand_terms(brand.name)
+    seen: set[str] = set()
+    for item in directory_search.get("organic_results", []):
+        link = str(item.get("link", ""))
+        if not _is_public_authority_url(link):
+            continue
+        snippet = " ".join(str(item.get(key, "")) for key in ("title", "snippet"))
+        matched_terms = {term for term in required_terms if term in snippet.casefold()}
+        if len(matched_terms) < min(2, len(required_terms)):
+            continue
+        try:
+            body = await _contact_body(link, store)
+        except (httpx.HTTPError, ValueError) as error:
+            failures.append(f"Public directory page failed: {link} ({error})")
+            continue
+        page_terms = {term for term in required_terms if term in body.casefold()}
+        if len(page_terms) < min(2, len(required_terms)):
+            failures.append(f"Public directory identity did not match: {link}")
+            continue
+        for match in find_phones(body):
+            if match.canonical not in seen:
+                references.append(
+                    ReferenceNumber(
+                        match.canonical,
+                        match.kind,
+                        "GOVERNMENT_DIRECTORY",
+                        link,
+                    )
+                )
+                seen.add(match.canonical)
     return references, failures

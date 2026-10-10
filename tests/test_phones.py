@@ -85,3 +85,11 @@ def test_search_variants_are_quoted_and_human_readable():
         '"1800 123 4567"',
         '"1800-123-4567"',
     )
+
+
+def test_indian_landline_has_a_human_readable_display_format():
+    match = normalise_phone("0482-2258058")
+    assert match is not None
+    assert match.canonical == "+914822258058"
+    assert match.kind == PhoneClass.LANDLINE
+    assert match.display == "+91 4822 258 058"

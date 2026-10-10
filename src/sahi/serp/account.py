@@ -20,9 +20,23 @@ async def resolve_location(city: str, store: Store) -> dict[str, Any] | None:
         )
     response.raise_for_status()
     choices = [item for item in response.json() if item.get("country_code") == "IN"]
-    choices.sort(key=lambda item: item.get("target_type") != "City")
     if not choices:
         return None
+    query = city.casefold().strip()
+
+    def relevance(item: dict[str, Any]) -> tuple[int, int]:
+        name = str(item.get("name", "")).casefold().strip()
+        canonical_head = str(item.get("canonical_name", "")).split(",", 1)[0].casefold().strip()
+        if query in {name, canonical_head}:
+            text_rank = 0
+        elif name.startswith(query) or canonical_head.startswith(query):
+            text_rank = 1
+        else:
+            text_rank = 2
+        type_rank = 0 if item.get("target_type") == "City" else 1
+        return text_rank, type_rank
+
+    choices.sort(key=relevance)
     selected = choices[0]
     gps = selected.get("gps") or [None, None]
     longitude, latitude = (gps + [None, None])[:2]

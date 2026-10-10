@@ -1,3 +1,20 @@
 {% extends "base.html" %}
 {% block title %}Number check · Sahi Number{% endblock %}
-{% block content %}<section class="page narrow"><a class="back" href="/?ui={{ ui }}">← {{ copy.new_check }}</a><h1>{{ check.brand_text }}</h1>{% if check.verdicts %}<div class="verdict-banner"><strong>{{ check.verdicts[0].verdict }}</strong><span>{{ check.verdicts[0].reasons|join(' · ') }}</span></div>{% else %}<div class="verdict-banner"><strong>{{ copy.no_verdict }}</strong><span>{{ copy.no_verdict_body }}</span></div>{% endif %}<h2>{{ copy.domains }}</h2>{% for domain, items in domains.items() %}<article class="evidence-row"><strong>{{ domain }}</strong><span>{{ items|length }}</span>{% for item in items %}<a href="/receipt/{{ item.search_id }}?ui={{ ui }}">{{ item.title or item.surface }}</a>{% endfor %}</article>{% else %}<p>{{ copy.no_appearances }}</p>{% endfor %}<p class="advice">{{ copy.advice }}</p></section>{% endblock %}
+{% block content %}
+<section class="page narrow">
+  <a class="back" href="/?ui={{ ui }}">← {{ copy.new_check }}</a>
+  <h1>{{ display }}</h1>
+  {% if brand_record %}
+  <section class="reference-strip">
+    <h2>{{ copy.compared_brand }}</h2>
+    <p><strong>{{ brand_record.name }}</strong>{% if brand_record.official_domain %} · {{ brand_record.official_domain }}{% endif %}</p>
+    {% if brand_record.official_domain and not brand_record.domain_verified %}<p><strong>{{ copy.unconfirmed }}</strong></p>{% endif %}
+    {% for ref in references %}<p><strong>{{ ref.canonical|phone_display }}</strong> <a href="{{ ref.source_url }}">{{ ref.source_kind }}</a></p>{% else %}<p>{{ copy.no_reference }}</p>{% endfor %}
+  </section>
+  {% endif %}
+  {% if check.verdicts %}<div class="verdict-banner"><strong>{{ check.verdicts[0].verdict }}</strong><span>{{ check.verdicts[0].reasons|join(' · ') }}</span></div>{% else %}<div class="verdict-banner"><strong>{{ copy.no_verdict }}</strong><span>{{ copy.no_verdict_body }}</span></div>{% endif %}
+  <h2>{{ copy.domains }}</h2>
+  {% for domain, items in domains.items() %}<article class="evidence-row"><strong>{{ domain }}</strong><span>{{ items|length }}</span>{% for item in items %}<a href="/receipt/{{ item.search_id }}?ui={{ ui }}">{{ item.title or item.surface }}</a>{% endfor %}</article>{% else %}<p>{{ copy.no_appearances }}</p>{% endfor %}
+  <p class="advice">{{ copy.advice }}</p>
+</section>
+{% endblock %}

@@ -7,6 +7,7 @@ from html import escape
 from pathlib import Path
 from typing import Any
 
+import yaml
 from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -14,7 +15,7 @@ from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 
 from sahi.config import ROOT, Settings, get_settings
-from sahi.extract.phones import PhoneClass, normalise_phone
+from sahi.extract.phones import PhoneClass, display_phone, normalise_phone
 from sahi.extract.walker import walk_response
 from sahi.pipeline import Pipeline
 from sahi.reference import Brand, load_brands
@@ -26,6 +27,7 @@ from sahi.verdict import decide
 TEMPLATE_DIR = Path(__file__).with_name("templates")
 STATIC_DIR = Path(__file__).with_name("static")
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
+templates.env.filters["phone_display"] = display_phone
 
 COPY = {
     "en": {
@@ -42,9 +44,11 @@ COPY = {
         "brand": "Brand",
         "brand_hint": "Choose or type a brand",
         "city": "City",
+        "city_hint": "Type any Indian city, town or locality",
         "search_language": "Search language",
         "phone": "Phone number",
         "brand_optional": "Brand (optional)",
+        "brand_optional_hint": "Type a brand or leave blank",
         "no_brand": "No brand — appearances only",
         "how_title": "What the result means",
         "how_body": (
@@ -69,8 +73,9 @@ COPY = {
         "references": "Reference sources checked",
         "collecting": "Collecting evidence…",
         "collecting_body": ("This page updates as Search, Ads, Maps and AI evidence completes."),
-        "published_refs": "Brand-published references",
+        "published_refs": "Brand and public-directory references",
         "unconfirmed": "Unconfirmed domain",
+        "compared_brand": "Compared with brand",
         "no_reference": "No stored reference number was available.",
         "no_numbers": "No phone numbers found",
         "no_numbers_body": "The stored search receipts did not contain an extractable number.",
@@ -94,7 +99,7 @@ COPY = {
         "hour_left": "this hour",
         "balance_unavailable": "account balance unavailable",
         "verdict_labels": {
-            "OFFICIAL_MATCH": "Found on the brand's official site",
+            "OFFICIAL_MATCH": "Found in a trusted reference",
             "NOT_CORROBORATED": "Not found on the brand's official site",
             "CONFLICT": "Conflicts with what the brand publishes",
             "CANNOT_VERIFY": "Cannot verify",
@@ -119,9 +124,11 @@ COPY = {
         "brand": "ब्रांड",
         "brand_hint": "ब्रांड चुनें या लिखें",
         "city": "शहर",
+        "city_hint": "भारत का कोई भी शहर, कस्बा या इलाका लिखें",
         "search_language": "खोज की भाषा",
         "phone": "फ़ोन नंबर",
         "brand_optional": "ब्रांड (वैकल्पिक)",
+        "brand_optional_hint": "ब्रांड लिखें या खाली छोड़ें",
         "no_brand": "कोई ब्रांड नहीं — केवल दिखने के स्थान",
         "how_title": "नतीजे का अर्थ",
         "how_body": (
@@ -145,8 +152,9 @@ COPY = {
         "references": "जाँचे गए संदर्भ स्रोत",
         "collecting": "सबूत जुटाए जा रहे हैं…",
         "collecting_body": "Search, Ads, Maps और AI सबूत पूरा होते ही यह पेज अपडेट होता है।",
-        "published_refs": "ब्रांड द्वारा प्रकाशित संदर्भ",
+        "published_refs": "ब्रांड और सार्वजनिक निर्देशिका संदर्भ",
         "unconfirmed": "अपुष्ट डोमेन",
+        "compared_brand": "इस ब्रांड से तुलना",
         "no_reference": "कोई संग्रहीत संदर्भ नंबर उपलब्ध नहीं था।",
         "no_numbers": "कोई फ़ोन नंबर नहीं मिला",
         "no_numbers_body": "संग्रहीत खोज रसीदों में निकालने योग्य नंबर नहीं था।",
@@ -170,7 +178,7 @@ COPY = {
         "hour_left": "इस घंटे बची खोजें",
         "balance_unavailable": "खाता शेष उपलब्ध नहीं",
         "verdict_labels": {
-            "OFFICIAL_MATCH": "ब्रांड की आधिकारिक वेबसाइट पर मिला",
+            "OFFICIAL_MATCH": "विश्वसनीय संदर्भ में मिला",
             "NOT_CORROBORATED": "आधिकारिक वेबसाइट पर नहीं मिला",
             "CONFLICT": "ब्रांड की प्रकाशित जानकारी से मेल नहीं खाता",
             "CANNOT_VERIFY": "जाँच नहीं हो सकी",
@@ -503,7 +511,8 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
     @application.get("/", response_class=HTMLResponse)
     async def home(request: Request, ui: str = "en"):
         context = await base_context(request, ui)
-        context.update({"brands": load_brands(), "cities": ["Mumbai", "Delhi", "Bengaluru"]})
+        cities = yaml.safe_load((ROOT / "seeds" / "cities.yaml").read_text()) or []
+        context.update({"brands": load_brands(), "cities": cities})
         return templates.TemplateResponse(request, "index.html", context)
 
     @application.post("/check")
@@ -514,11 +523,14 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
         lang: str = Form("en"),
     ):
         selected_brand = resolve_brand(brand)
+        cleaned_city = " ".join(city.split())
+        if not cleaned_city:
+            raise HTTPException(400, "Enter an Indian city, town or locality")
         check_id = uuid.uuid4().hex
 
         async def run() -> None:
             await Pipeline(settings, store, serp_client).brand_check(
-                selected_brand, city, lang, check_id=check_id
+                selected_brand, cleaned_city, lang, check_id=check_id
             )
 
         background_tasks.add_task(run)
@@ -526,8 +538,7 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
 
     @application.post("/number")
     async def create_number_check(number: str = Form(...), brand: str = Form("")):
-        brands = {item.id: item for item in load_brands()}
-        selected = brands.get(brand) if brand else None
+        selected = resolve_brand(brand) if brand.strip() else None
         try:
             result = await Pipeline(settings, store, serp_client).number_check(number, selected)
         except ValueError as error:
@@ -543,8 +554,37 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
         domains: dict[str, list[dict[str, Any]]] = {}
         for item in details["sightings"]:
             domains.setdefault(item["domain"] or "unknown", []).append(item)
+        brand_record = None
+        references: list[dict[str, Any]] = []
+        if details["brand_id"]:
+            with store.connect() as connection:
+                brand_row = connection.execute(
+                    "SELECT * FROM brands WHERE id=?", (details["brand_id"],)
+                ).fetchone()
+                reference_rows = connection.execute(
+                    "SELECT * FROM reference_numbers WHERE brand_id=? ORDER BY source_kind",
+                    (details["brand_id"],),
+                ).fetchall()
+            brand_record = dict(brand_row) if brand_row else None
+            references = [dict(row) for row in reference_rows]
+        canonical = (
+            details["verdicts"][0]["canonical"]
+            if details["verdicts"]
+            else details["sightings"][0]["canonical"]
+            if details["sightings"]
+            else details["brand_text"]
+        )
         context = await base_context(request, ui)
-        context.update({"check": details, "domains": domains})
+        context.update(
+            {
+                "check": details,
+                "domains": domains,
+                "canonical": canonical,
+                "display": display_phone(canonical),
+                "brand_record": brand_record,
+                "references": references,
+            }
+        )
         return templates.TemplateResponse(request, "number_result.html", context)
 
     @application.get("/check/{check_id}", response_class=HTMLResponse)
@@ -590,6 +630,7 @@ def create_app(settings: Settings | None = None, store: Store | None = None) -> 
                     ),
                     "UNKNOWN",
                 ),
+                "display": display_phone(row["canonical"]),
             }
             for row in history_rows
         }

@@ -1,13 +1,13 @@
 <section class="page">
   <div class="result-heading"><div><h1>{{ check.brand_text }}</h1><p>{{ check.city }} · {{ check.lang|upper }}</p></div><div class="receipt-count">{{ check.searches_used }}<span>{{ copy.live_searches }}</span></div></div>
   {% if check.steps %}<section class="status-grid" aria-label="Collection steps">{% for step in check.steps %}<article class="status-panel status-{{ step.status }}"><strong>{{ step.step }}</strong><span>{{ step.status|replace('_', ' ')|title }}</span>{% if step.detail %}<small>{{ step.detail }}</small>{% endif %}</article>{% endfor %}</section>{% endif %}
-  <section class="reference-strip"><h2>{{ copy.published_refs }}</h2>{% if brand_record and not brand_record.domain_verified %}<p><strong>{{ copy.unconfirmed }}:</strong> {{ brand_record.official_domain or '—' }}</p>{% endif %}{% if references %}{% for ref in references %}<p><strong>{{ ref.canonical }}</strong> <a href="{{ ref.source_url }}">{{ ref.source_kind }}</a></p>{% endfor %}{% else %}<p>{{ copy.no_reference }}</p>{% endif %}</section>
+  <section class="reference-strip"><h2>{{ copy.published_refs }}</h2>{% if brand_record and brand_record.official_domain and not brand_record.domain_verified %}<p><strong>{{ copy.unconfirmed }}:</strong> {{ brand_record.official_domain }}</p>{% endif %}{% if references %}{% for ref in references %}<p><strong>{{ ref.canonical|phone_display }}</strong> <a href="{{ ref.source_url }}">{{ ref.source_kind }}</a></p>{% endfor %}{% else %}<p>{{ copy.no_reference }}</p>{% endif %}</section>
   <div class="number-list">
   {% for item in check.verdicts %}
     {% set meta = number_meta.get(item.canonical, {}) %}
     <article class="number-record verdict-{{ item.verdict|lower }}">
       <div class="verdict-icon" aria-hidden="true">{% if item.verdict == 'OFFICIAL_MATCH' %}✓{% elif item.verdict == 'CONFLICT' %}!{% elif item.verdict == 'CANNOT_VERIFY' %}?{% else %}–{% endif %}</div>
-      <div><p class="number">{{ item.canonical }}</p><p class="number-meta">{{ meta.get('class', 'UNKNOWN') }} · {{ meta.get('surfaces', [])|join(', ') }}{% if meta.get('first_seen') %} · {{ copy.first_seen }} {{ meta.first_seen }}{% endif %}</p><h2>{{ item.verdict }}</h2><p><strong>{{ copy.verdict_labels[item.verdict] }}</strong> · {{ item.reasons|join(' · ') }}</p><a href="/check/{{ check.id }}/number/{{ item.canonical }}?ui={{ ui }}">{{ copy.evidence }} →</a></div>
+      <div><p class="number">{{ meta.get('display', item.canonical|phone_display) }}</p><p class="number-meta">{{ meta.get('class', 'UNKNOWN') }} · {{ meta.get('surfaces', [])|join(', ') }}{% if meta.get('first_seen') %} · {{ copy.first_seen }} {{ meta.first_seen }}{% endif %}</p><h2>{{ item.verdict }}</h2><p><strong>{{ copy.verdict_labels[item.verdict] }}</strong> · {{ item.reasons|join(' · ') }}</p><a href="/check/{{ check.id }}/number/{{ item.canonical }}?ui={{ ui }}">{{ copy.evidence }} →</a></div>
     </article>
   {% else %}<div class="empty"><h2>{{ copy.no_numbers }}</h2><p>{{ copy.no_numbers_body }}</p></div>{% endfor %}
   </div>

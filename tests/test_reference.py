@@ -1,6 +1,6 @@
 import pytest
 
-from sahi.reference import Brand, build_reference_set
+from sahi.reference import Brand, build_public_directory_references, build_reference_set
 from sahi.store import Store
 
 
@@ -90,3 +90,34 @@ async def test_contact_page_cache_expires_after_24_hours(db_path, monkeypatch):
 
     assert failures == []
     assert {item.canonical for item in references} == {"1800765432"}
+
+
+@pytest.mark.asyncio
+async def test_public_directory_reference_requires_indian_authority_and_brand_match(monkeypatch):
+    async def fake_page(url, _store):
+        assert url == "https://kottayam.nic.in/en/public-utility/state-bank-of-india-132/"
+        return "STATE BANK OF INDIA VALAVOOR Phone: 0482-2258058"
+
+    monkeypatch.setattr("sahi.reference._contact_body", fake_page)
+    brand = Brand(id="free-sbi-valavoor", name="SBI Bank Valavoor")
+    search = {
+        "organic_results": [
+            {
+                "title": "State Bank of India - Valavoor",
+                "snippet": "Bank Valavoor phone 0482-2258058",
+                "link": "https://kottayam.nic.in/en/public-utility/state-bank-of-india-132/",
+            },
+            {
+                "title": "SBI Bank Valavoor",
+                "snippet": "Phone 0482-2258058",
+                "link": "https://directory.example.test/sbi-valavoor",
+            },
+        ]
+    }
+
+    references, failures = await build_public_directory_references(brand, search)
+
+    assert failures == []
+    assert [(item.canonical, item.source_kind) for item in references] == [
+        ("+914822258058", "GOVERNMENT_DIRECTORY")
+    ]

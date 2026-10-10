@@ -25,6 +25,19 @@ flowchart LR
 
 There is no language model in the runtime. Phone extraction, signals, and the four-state verdict are deterministic code covered by offline tests.
 
+### Which check should I use?
+
+**Brand Check** starts with a brand and a place. Use it when you want to see the
+numbers Google shows for a local business or branch, then compare every number
+against trusted references. For example: `SBI Bank Valavoor` in `Valavoor,
+Kerala`.
+
+**Number Check** starts with one number. Use it when a caller, ad, or search
+result has already given you a number and you want to see where it appears, and
+optionally compare it with a named brand. A number can be formatted as a normal
+Indian landline (such as `0482-2258058`) or international form; the application
+stores one canonical identity but displays it in a readable format.
+
 ## How SerpApi is used
 
 The search results page is the object being audited—not merely a way to find another data source.
@@ -36,7 +49,7 @@ The search results page is the object being audited—not merely a way to find a
 | [Google Maps](https://serpapi.com/google-maps-api) | `type=search`, `q`, `ll` or `location` + `z=12`, `hl` | Inspect listing phone, website, address, IDs, and unclaimed status |
 | [Maps Reviews](https://serpapi.com/google-maps-reviews-api) | `data_id`, `sort_by=newestFirst`, `hl` | Look for named warning phrases without retaining reviewer identity |
 | [Google AI Overview](https://serpapi.com/google-ai-overview-api) | `page_token` | Redeem an expiring AI Overview block when Google supplies a token |
-| [Locations](https://serpapi.com/locations-api) | `q`, `limit=5` | Resolve an Indian city to canonical name and `[longitude, latitude]` |
+| [Locations](https://serpapi.com/locations-api) | `q`, `limit=5` | Resolve an Indian city, town, or locality to a canonical name and `[longitude, latitude]` |
 | Account API | API key only | Guard the monthly reserve and show credits left; this call is free |
 
 Every search response is scrubbed before SQLite persistence. The UI links to a local receipt route, never to a secret-bearing archive URL.
@@ -45,7 +58,7 @@ Every search response is scrubbed before SQLite persistence. The UI links to a l
 
 | Verdict | Meaning |
 |---|---|
-| `OFFICIAL_MATCH` | Found on the brand's official site |
+| `OFFICIAL_MATCH` | Found on the brand's official site or a matching Indian public-authority directory |
 | `NOT_CORROBORATED` | Not found on the brand's official site |
 | `CONFLICT` | Conflicts with what the brand publishes |
 | `CANNOT_VERIFY` | The reference set is unavailable |
@@ -94,7 +107,10 @@ checking a real brand, add its hand-verified domain to `seeds/brands.yaml`; leav
 `official_numbers` empty unless each number has a fetched `source_url` and
 `verified_on` date. A free-text brand is also accepted in the web form and is
 marked as using an unconfirmed domain when one is derived from Google's knowledge
-graph.
+graph. The Brand Check place field also accepts free text such as
+`Valavoor, Kerala`; its suggestions are only shortcuts. Sahi asks SerpApi's
+Locations API for the closest Indian match, so very small or ambiguous localities
+may need a district or state suffix.
 
 Useful commands:
 
@@ -118,7 +134,7 @@ that port instead. To stop the server, press `Ctrl+C`.
 
 ## Credits, cache, and replay
 
-A brand check uses up to `MAX_SEARCHES_PER_CHECK` (default 8). Search, official-site lookup, Maps, and optional Ads run first; up to two number searches, one review lookup, and one AI Overview redemption fit inside the remaining cap. Local cache hits cost nothing; official-site search is cached for 24 hours. The guard refuses calls at the hourly limit or below `MIN_CREDITS_RESERVE`. Replay mode never touches the network and raises a visible replay miss when no matching receipt exists.
+A brand check uses up to `MAX_SEARCHES_PER_CHECK` (default 8). Search, official-site lookup, Maps, optional Ads, and a public-directory search run first; number searches, review lookup, and AI Overview redemption use only the remaining cap. Local cache hits cost nothing; official-site and public-directory searches are cached for 24 hours. The guard refuses calls at the hourly limit or below `MIN_CREDITS_RESERVE`. Replay mode never touches the network and raises a visible replay miss when no matching receipt exists.
 
 ## Limits
 
