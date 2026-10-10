@@ -1,0 +1,25 @@
+{
+  "_sahi_fixture": {
+    "cache_key": "051acbbb6009d24e5bce7388499601086a832a29009d7254f2b155c44a2af706",
+    "engine": "google_ads",
+    "params": {
+      "hl": "hi",
+      "location": "Mumbai",
+      "q": "Example Air कस्टमर केयर नंबर"
+    }
+  },
+  "response": {
+    "ads": [
+      {
+        "description": "Call 98765 43210",
+        "link": "https://directory.test/help",
+        "position": 1,
+        "title": "Customer help"
+      }
+    ],
+    "search_metadata": {
+      "id": "demo-ads",
+      "status": "Success"
+    }
+  }
+}

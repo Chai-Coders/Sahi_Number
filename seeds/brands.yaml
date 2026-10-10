@@ -1,0 +1,11 @@
+- id: example-air
+  name: "Example Air"
+  aliases: ["ExampleAir"]
+  official_domain: "example-air.test"
+  contact_urls: []
+  official_numbers: []
+  domain_verified: false
+
+# Add real brands only after checking the domain by hand. Add a number only
+# with source_url and verified_on from a page fetched in the same session.
+

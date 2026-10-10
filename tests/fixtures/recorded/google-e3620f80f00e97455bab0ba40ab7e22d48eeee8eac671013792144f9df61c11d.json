@@ -1,0 +1,28 @@
+{
+  "_sahi_fixture": {
+    "cache_key": "e3620f80f00e97455bab0ba40ab7e22d48eeee8eac671013792144f9df61c11d",
+    "engine": "google",
+    "params": {
+      "device": "mobile",
+      "gl": "in",
+      "google_domain": "google.co.in",
+      "hl": "hi",
+      "location": "Mumbai",
+      "q": "Example Air कस्टमर केयर नंबर"
+    }
+  },
+  "response": {
+    "organic_results": [
+      {
+        "link": "https://example-air.test/contact",
+        "position": 1,
+        "snippet": "Call 1800 123 456",
+        "title": "Example Air contact"
+      }
+    ],
+    "search_metadata": {
+      "id": "demo-receipt",
+      "status": "Success"
+    }
+  }
+}

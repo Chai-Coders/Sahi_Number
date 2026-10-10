@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{{ copy.title }} · Sahi Number{% endblock %}
+{% block content %}
+<section class="first-view">
+  <div class="intro">
+    <h1>{{ copy.title }}</h1>
+    <p>{{ copy.dek }}</p>
+    <div class="budget-note"><strong>{{ budget_line }}</strong><span>{{ copy.cache_zero }}</span></div>
+  </div>
+  <div class="check-desk">
+    <input class="mode-radio" type="radio" name="check-mode" id="brand-mode" checked>
+    <input class="mode-radio" type="radio" name="check-mode" id="number-mode">
+    <div class="tabs" role="tablist" aria-label="Check type"><label for="brand-mode" role="tab">{{ copy.brand_tab }}</label><label for="number-mode" role="tab">{{ copy.number_tab }}</label></div>
+    <form method="post" action="/check" class="check-form">
+      <label>{{ copy.brand }}<input name="brand" list="brand-options" value="example-air" placeholder="{{ copy.brand_hint }}" required></label>
+      <datalist id="brand-options">{% for brand in brands %}<option value="{{ brand.id }}">{{ brand.name }}</option>{% endfor %}</datalist>
+      <div class="form-row">
+        <label>{{ copy.city }}<select name="city">{% for city in cities %}<option>{{ city }}</option>{% endfor %}</select></label>
+        <label>{{ copy.search_language }}<select name="lang"><option value="en">English</option><option value="hi">हिंदी</option></select></label>
+      </div>
+      <button class="primary" type="submit">{{ copy.run }}</button>
+    </form>
+    <form method="post" action="/number" class="check-form number-form">
+      <label>{{ copy.phone }}<input name="number" inputmode="tel" placeholder="1800 123 456" required></label>
+      <label>{{ copy.brand_optional }}<select name="brand"><option value="">{{ copy.no_brand }}</option>{% for brand in brands %}<option value="{{ brand.id }}">{{ brand.name }}</option>{% endfor %}</select></label>
+      <button class="secondary" type="submit">{{ copy.number_tab }}</button>
+    </form>
+  </div>
+</section>
+<section class="how"><h2>{{ copy.how_title }}</h2><p>{{ copy.how_body }}</p></section>
+{% endblock %}

@@ -1,0 +1,27 @@
+{
+  "_sahi_fixture": {
+    "cache_key": "178e5867ec3bd287555951c7826a5d822370c81c200fe11a9cc0f067325200f2",
+    "engine": "google_maps",
+    "params": {
+      "hl": "en",
+      "location": "Mumbai",
+      "q": "Example Air customer care",
+      "type": "search",
+      "z": 12
+    }
+  },
+  "response": {
+    "local_results": [
+      {
+        "phone": "98765 43210",
+        "position": 1,
+        "title": "Example Air Help",
+        "unclaimed_listing": true
+      }
+    ],
+    "search_metadata": {
+      "id": "demo-maps",
+      "status": "Success"
+    }
+  }
+}

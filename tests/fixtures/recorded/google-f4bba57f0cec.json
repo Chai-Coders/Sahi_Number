@@ -1,0 +1,32 @@
+{
+  "ads": [
+    {
+      "description": "Call 98765 43210",
+      "link": "https://directory.test/help",
+      "position": 1,
+      "title": "Customer help"
+    }
+  ],
+  "local_results": {
+    "places": [
+      {
+        "phone": "98765 43210",
+        "position": 1,
+        "title": "Example Air Help",
+        "unclaimed_listing": true
+      }
+    ]
+  },
+  "organic_results": [
+    {
+      "link": "https://example-air.test/contact",
+      "position": 1,
+      "snippet": "Call 1800 123 456",
+      "title": "Example Air contact"
+    }
+  ],
+  "search_metadata": {
+    "id": "demo-receipt",
+    "status": "Success"
+  }
+}

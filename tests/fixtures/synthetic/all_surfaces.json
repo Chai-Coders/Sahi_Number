@@ -1,0 +1,10 @@
+{
+  "search_metadata": {"id": "synthetic-receipt", "status": "Success"},
+  "organic_results": [{"position": 1, "title": "Example Air", "link": "https://example-air.test/contact", "snippet": "Call 1800 123 456"}],
+  "answer_box": {"title": "Answer", "answer": "Helpline 1860 123 4567"},
+  "knowledge_graph": {"title": "Example Air", "sales": "011 2345 6789"},
+  "local_results": {"places": [{"position": 1, "title": "Example Air", "phone": "98765 43210"}]},
+  "ads": [{"position": 1, "title": "Help", "link": "https://directory.test", "description": "Call 98765 43211"}],
+  "related_questions": [{"question": "Emergency?", "snippet": "Dial 1930"}],
+  "ai_overview": {"text_blocks": [{"snippet": "Try 1800 765 4321"}]}
+}

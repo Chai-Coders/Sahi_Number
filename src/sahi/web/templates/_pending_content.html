@@ -1,0 +1,15 @@
+<section class="page narrow" hx-get="/check/{{ check_id }}/fragment?ui={{ ui }}" hx-trigger="every 1s" hx-swap="outerHTML">
+  <h1>{{ copy.collecting }}</h1>
+  <div class="status-grid" aria-live="polite">
+    {% for step in steps %}
+      <article class="status-panel status-{{ step.status }}">
+        <strong>{{ step.step }}</strong>
+        <span>{{ step.status|replace('_', ' ')|title }}</span>
+        {% if step.detail %}<small>{{ step.detail }}</small>{% endif %}
+      </article>
+    {% else %}
+      <div class="skeleton"></div>
+    {% endfor %}
+  </div>
+  <p>{{ copy.collecting_body }}</p>
+</section>

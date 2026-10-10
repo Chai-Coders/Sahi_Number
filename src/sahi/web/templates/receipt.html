@@ -1,0 +1,2 @@
+{% extends "base.html" %}
+{% block content %}<section class="page"><a class="back" href="javascript:history.back()">← {{ copy.back }}</a><h1>{{ copy.search_receipt }}</h1><dl class="receipt-meta"><div><dt>{{ copy.engine }}</dt><dd>{{ receipt.engine }}</dd></div><div><dt>{{ copy.serpapi_id }}</dt><dd>{{ receipt.serpapi_id or copy.unavailable }}</dd></div><div><dt>{{ copy.fetched }}</dt><dd>{{ receipt.fetched_at }}</dd></div></dl><h2>{{ copy.parameters }}</h2><pre>{{ params }}</pre><h2>{{ copy.scrubbed }}</h2><pre>{{ body }}</pre></section>{% endblock %}

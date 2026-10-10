@@ -1,0 +1,26 @@
+{
+  "_sahi_fixture": {
+    "cache_key": "49563b3fdce0c4483868653fccd37a6908742a9d5fc65bb254be48505f0772e6",
+    "engine": "google",
+    "params": {
+      "gl": "in",
+      "google_domain": "google.co.in",
+      "hl": "en",
+      "q": "site:example-air.test customer care OR helpline OR \"toll free\" OR contact"
+    }
+  },
+  "response": {
+    "organic_results": [
+      {
+        "link": "https://example-air.test/contact",
+        "position": 1,
+        "snippet": "Toll free 1800 123 456",
+        "title": "Contact Example Air"
+      }
+    ],
+    "search_metadata": {
+      "id": "demo-official",
+      "status": "Success"
+    }
+  }
+}

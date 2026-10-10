@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="{{ ui }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f1e7">
+  <title>{% block title %}Sahi Number{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
+  <script src="https://unpkg.com/htmx.org@2.0.8" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="topbar">
+    <a class="brand" href="/?ui={{ ui }}" aria-label="Sahi Number home">
+      <span class="brand-mark" aria-hidden="true">SN</span>
+      <span>Sahi Number</span>
+    </a>
+    <nav aria-label="Utility">
+      <a href="/sweep?ui={{ ui }}">{{ copy.sweep }}</a>
+      <a href="/limits?ui={{ ui }}">{{ copy.limits }}</a>
+      <a class="language" href="?ui={{ 'en' if ui == 'hi' else 'hi' }}">{{ 'English' if ui == 'hi' else 'हिंदी' }}</a>
+    </nav>
+  </header>
+  <main id="main">{% block content %}{% endblock %}</main>
+  <footer>
+    {% if check is defined %}<span>{{ check.searches_used }} {{ copy.used_by_check }}</span>{% endif %}
+    <span>{{ mode_label }}</span>
+    <span>{{ copy.guarantee }}</span>
+  </footer>
+</body>
+</html>

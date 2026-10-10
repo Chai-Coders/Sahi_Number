@@ -1,0 +1,32 @@
+{
+  "_sahi_fixture": {
+    "cache_key": "50da53cbbae61ec650a909178b31b93f3421096d6cddbd450e1b909733d10cb3",
+    "engine": "google",
+    "params": {
+      "gl": "in",
+      "google_domain": "google.co.in",
+      "q": "\"1800123456\" OR \"1800 123 456\" OR \"1800-123-456\"",
+      "hl": "en"
+    }
+  },
+  "response": {
+    "search_metadata": {
+      "id": "synthetic-number-receipt",
+      "status": "Success"
+    },
+    "organic_results": [
+      {
+        "position": 1,
+        "title": "Example Air contact",
+        "link": "https://example-air.test/contact",
+        "snippet": "Call 1800 123 456"
+      },
+      {
+        "position": 2,
+        "title": "Example directory listing",
+        "link": "https://directory.test/example-air",
+        "snippet": "Customer care 1800 123 456"
+      }
+    ]
+  }
+}
