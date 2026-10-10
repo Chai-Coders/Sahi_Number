@@ -207,6 +207,26 @@ class Store:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def historical_brand_sightings(self, canonical: str) -> list[dict[str, Any]]:
+        """Return saved evidence for a number from earlier brand checks.
+
+        A number-only search should not discard a previously captured source just
+        because a later broad Google query ranks unrelated material.  Restrict
+        this to completed brand checks: those are the checks where the user gave
+        the owner and locality context needed to make the old evidence useful.
+        """
+
+        with self.connect() as connection:
+            rows = connection.execute(
+                """SELECT sightings.*
+                FROM sightings
+                JOIN checks ON checks.id = sightings.check_id
+                WHERE sightings.canonical=? AND checks.mode='brand'
+                ORDER BY checks.finished_at DESC, sightings.id DESC""",
+                (canonical,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def save_check(
         self,
         check: dict[str, Any],

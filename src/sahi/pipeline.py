@@ -475,6 +475,31 @@ class Pipeline:
                     )
                     if item.canonical == normalized.canonical
                 ]
+        if not sightings:
+            # A brand check can capture a local, trusted listing that a later
+            # number-only Google query fails to rank.  Reuse the saved receipt
+            # so Number Check remains evidence-based and does not pretend that
+            # this previously recorded appearance never existed.
+            for item in self.store.historical_brand_sightings(normalized.canonical):
+                try:
+                    kind = PhoneClass(item["class"])
+                except ValueError:
+                    kind = normalized.kind
+                sightings.append(
+                    Sighting(
+                        canonical=item["canonical"],
+                        raw=item["raw"],
+                        kind=kind,
+                        surface=item["surface"],
+                        json_path=item["json_path"],
+                        title=item["title"],
+                        link=item["link"],
+                        domain=item["domain"],
+                        position=item["position"],
+                        receipt_id=item["search_id"],
+                        item={},
+                    )
+                )
         domains: dict[str, list[Sighting]] = {}
         for item in sightings:
             domains.setdefault(item.domain or "unknown", []).append(item)

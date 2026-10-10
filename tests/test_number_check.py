@@ -2,6 +2,7 @@ import pytest
 
 from sahi.config import Settings
 from sahi.extract.phones import normalise_phone, primary_search_query
+from sahi.extract.walker import Sighting
 from sahi.pipeline import Pipeline
 from sahi.reference import Brand, load_brands
 from sahi.serp.client import SearchResult, SerpClient, make_cache_key
@@ -243,6 +244,60 @@ async def test_number_check_uses_contact_context_when_google_returns_unrelated_p
         '"94000 63494" contact',
     ]
     assert "iiitkottayam.ac.in" in result.domains
+
+
+@pytest.mark.asyncio
+async def test_number_check_reuses_saved_brand_evidence_when_new_search_is_empty(db_path):
+    store = Store(db_path)
+    canonical = "+914822216381"
+    store.save_check(
+        {
+            "id": "previous-brand-check",
+            "mode": "brand",
+            "brand_id": "sbi-valavoor",
+            "brand_text": "SBI Bank Valavoor",
+            "city": "Pala, Kerala, India",
+            "lang": "en",
+            "started_at": "2026-10-10T10:00:00+00:00",
+            "finished_at": "2026-10-10T10:01:00+00:00",
+            "searches_used": 1,
+            "skipped": [],
+        },
+        [
+            Sighting(
+                canonical=canonical,
+                raw="04822 216381",
+                kind=normalise_phone("04822 216381").kind,
+                surface="ORGANIC",
+                json_path="organic_results[0].snippet",
+                title="STATE BANK OF INDIA | Kottayam District",
+                link="https://kottayam.nic.in/public-utility/sbi",
+                domain="kottayam.nic.in",
+                position=1,
+                receipt_id=7,
+                item={},
+            )
+        ],
+        {},
+        [],
+    )
+
+    class Client:
+        async def search(self, engine, _params, _budget, **_kwargs):
+            return SearchResult(
+                9,
+                "empty",
+                engine,
+                {"search_metadata": {"status": "Success"}, "organic_results": []},
+                None,
+                False,
+            )
+
+    settings = Settings(serpapi_mode="live", serpapi_api_key="test-key")
+    result = await Pipeline(settings, store, Client()).number_check("04822 216381")
+
+    assert result.canonical == canonical
+    assert "kottayam.nic.in" in result.domains
 
 
 @pytest.mark.asyncio
